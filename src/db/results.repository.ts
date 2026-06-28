@@ -1,18 +1,63 @@
-import pg from 'pg';
+// Data access for the `results` table. One row per (server, player, puzzle).
 
-// Schema is managed declaratively by pgschema (see db/schema.sql); this module
-// only issues queries. Connection comes from DATABASE_URL.
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+import type { ResultSource } from '../types.js';
+import { pool } from './pool.js';
 
-// Records one game. The most recent message wins (by message_ts); an older
-// message arriving late is ignored. Grid is preserved when the newer source
-// lacks it, and hard mode is only changed by the manual-text source (others
-// don't report it). Returns 'inserted' | 'updated' | 'unchanged' | 'stale'.
-export async function recordResult(r) {
+export type RecordStatus = 'inserted' | 'updated' | 'unchanged' | 'stale';
+
+/** A game to persist. */
+export interface ResultRecord {
+  guildId: string;
+  userId: string;
+  puzzleNumber: number;
+  puzzleDate: string;
+  guesses: number;
+  solved: boolean;
+  grid: string | null;
+  hardMode: boolean;
+  source: ResultSource;
+  messageTs: Date;
+  username: string;
+  messageId: string;
+}
+
+/** Row shape returned for leaderboard aggregation. */
+export interface LeaderboardRow {
+  userId: string;
+  username: string | null;
+  guesses: number;
+  solved: boolean;
+}
+
+/** Row shape returned for a single player's history. */
+export interface UserResultRow {
+  number: number;
+  date: string;
+  guesses: number;
+  solved: boolean;
+  grid: string | null;
+  hardMode: boolean;
+}
+
+interface ExistingRow {
+  guesses: number;
+  solved: boolean;
+  grid: string | null;
+  hard_mode: boolean;
+  message_ts: Date;
+}
+
+/**
+ * Records one game. The most recent message wins (by message_ts); an older
+ * message arriving late is ignored. Grid is preserved when the newer source
+ * lacks it, and hard mode is only changed by the manual-text source (others do
+ * not report it).
+ */
+export async function recordResult(r: ResultRecord): Promise<RecordStatus> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows } = await client.query(
+    const { rows } = await client.query<ExistingRow>(
       `SELECT guesses, solved, grid, hard_mode, message_ts
          FROM results
         WHERE guild_id = $1 AND user_id = $2 AND puzzle_number = $3
@@ -58,8 +103,8 @@ export async function recordResult(r) {
   }
 }
 
-export async function getResults(guildId, from, to) {
-  const { rows } = await pool.query(
+export async function getResults(guildId: string, from: string, to: string): Promise<LeaderboardRow[]> {
+  const { rows } = await pool.query<LeaderboardRow>(
     `SELECT user_id AS "userId", username, guesses, solved
        FROM results
       WHERE guild_id = $1 AND puzzle_date BETWEEN $2 AND $3`,
@@ -68,8 +113,13 @@ export async function getResults(guildId, from, to) {
   return rows;
 }
 
-export async function getUserResults(guildId, userId, from, to) {
-  const { rows } = await pool.query(
+export async function getUserResults(
+  guildId: string,
+  userId: string,
+  from: string,
+  to: string,
+): Promise<UserResultRow[]> {
+  const { rows } = await pool.query<UserResultRow>(
     `SELECT puzzle_number AS number, puzzle_date AS date, guesses, solved, grid, hard_mode AS "hardMode"
        FROM results
       WHERE guild_id = $1 AND user_id = $2 AND puzzle_date BETWEEN $3 AND $4

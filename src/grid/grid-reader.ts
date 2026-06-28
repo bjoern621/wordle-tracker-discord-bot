@@ -9,7 +9,16 @@ const COL_FRACS = [0.551, 0.598, 0.645, 0.691, 0.738];
 const ROW_FRACS = [0.371, 0.457, 0.543, 0.629, 0.714, 0.8];
 const PATCH = 4; // half-width of the averaged sample square, in pixels
 
-function classify(r, g, b) {
+type Cell = 'green' | 'yellow' | 'absent' | 'empty' | 'other';
+
+export interface GridResult {
+  guesses: number;
+  solved: boolean;
+  /** Per-guess colour rows (B/Y/G), one string of five characters each. */
+  patterns: string[];
+}
+
+function classify(r: number, g: number, b: number): Cell {
   const bright = (r + g + b) / 3;
   const spread = Math.max(r, g, b) - Math.min(r, g, b);
   if (g > r + 25 && g > b + 25 && g > 70) return 'green';
@@ -19,7 +28,7 @@ function classify(r, g, b) {
   return 'other';
 }
 
-function sampleCell(png, cx, cy) {
+function sampleCell(png: PNG, cx: number, cy: number): Cell {
   const { width, height, data } = png;
   let r = 0;
   let g = 0;
@@ -39,11 +48,13 @@ function sampleCell(png, cx, cy) {
 }
 
 // B/Y/G pattern per cell, matching the manual share-text representation.
-const CHAR = { green: 'G', yellow: 'Y', absent: 'B', empty: 'B', other: 'B' };
+const CHAR: Record<Cell, string> = { green: 'G', yellow: 'Y', absent: 'B', empty: 'B', other: 'B' };
 
-// Returns { guesses, solved, patterns } for a finished game, or null when the
-// grid is empty or the game is still in progress (fewer than 6 rows, unsolved).
-export function parseGrid(buffer) {
+/**
+ * Returns the finished game's grid, or null when the grid is empty or the game
+ * is still in progress (fewer than 6 rows and not solved).
+ */
+export function parseGrid(buffer: Buffer): GridResult | null {
   const png = PNG.sync.read(buffer);
   const rows = ROW_FRACS.map((ry) => {
     const cy = Math.round(ry * png.height);

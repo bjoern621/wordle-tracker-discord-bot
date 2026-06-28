@@ -40,7 +40,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://wordle:${POSTGRES_PASSWORD:-wordle}@db:5432/wordle
-    command: node src/bot.js
+    command: node dist/index.js
     depends_on:
       db:
         condition: service_healthy
@@ -52,7 +52,7 @@ services:
   logger:
     build: .
     env_file: .env
-    command: node src/logger.js
+    command: node dist/logger/logger.js
     volumes:
       - ./data:/app/data
     profiles:

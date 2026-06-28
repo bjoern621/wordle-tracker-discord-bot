@@ -1,6 +1,40 @@
-// Aggregations computed in JS from a player's result rows.
+// Aggregations computed in JS from result rows. Kept out of SQL so the query
+// layer stays database-agnostic.
 
-export function summarize(rows) {
+import type { LeaderboardRow, UserResultRow } from '../db/results.repository.js';
+import { FAIL_SCORE } from '../constants.js';
+
+export interface PlayerSummary {
+  games: number;
+  wins: number;
+  fails: number;
+  winRate: number;
+  avgGuesses: number | null;
+  avgScore: number | null;
+  best: number | null;
+  distribution: number[];
+  current: number;
+  longest: number;
+}
+
+export interface LeaderboardEntry {
+  userId: string;
+  username: string | null;
+  games: number;
+  wins: number;
+  avgScore: number | null;
+  avgGuesses: number | null;
+  best: number | null;
+}
+
+export interface HeadToHead {
+  common: number;
+  w1: number;
+  w2: number;
+  draw: number;
+}
+
+export function summarize(rows: UserResultRow[]): PlayerSummary {
   const games = rows.length;
   const wins = rows.filter((r) => r.solved).length;
   const solvedGuesses = rows.filter((r) => r.solved).map((r) => r.guesses);
@@ -8,7 +42,7 @@ export function summarize(rows) {
     ? solvedGuesses.reduce((a, b) => a + b, 0) / solvedGuesses.length
     : null;
   const avgScore = games
-    ? rows.reduce((a, r) => a + (r.solved ? r.guesses : 7), 0) / games
+    ? rows.reduce((a, r) => a + (r.solved ? r.guesses : FAIL_SCORE), 0) / games
     : null;
   const distribution = [1, 2, 3, 4, 5, 6].map(
     (g) => rows.filter((r) => r.solved && r.guesses === g).length,
@@ -28,11 +62,14 @@ export function summarize(rows) {
 
 // A streak is a run of consecutive puzzle numbers that were all solved. A miss
 // or a fail breaks it. Current streak is the run ending at the latest solve.
-function streaks(rows) {
-  const solved = rows.filter((r) => r.solved).map((r) => r.number).sort((a, b) => a - b);
+function streaks(rows: UserResultRow[]): { current: number; longest: number } {
+  const solved = rows
+    .filter((r) => r.solved)
+    .map((r) => r.number)
+    .sort((a, b) => a - b);
   let longest = 0;
   let run = 0;
-  let prev = null;
+  let prev: number | null = null;
   for (const n of solved) {
     run = prev !== null && n === prev + 1 ? run + 1 : 1;
     longest = Math.max(longest, run);
@@ -50,11 +87,21 @@ function streaks(rows) {
   return { current, longest };
 }
 
-// Groups raw result rows into a leaderboard, ranked by average score (failed
-// games count as 7), then by games played. Replaces SQL-side aggregation so the
-// query layer stays database-agnostic.
-export function aggregateLeaderboard(rows) {
-  const byUser = new Map();
+/**
+ * Groups raw result rows into a leaderboard, ranked by average score (failed
+ * games count as FAIL_SCORE), then by games played.
+ */
+export function aggregateLeaderboard(rows: LeaderboardRow[]): LeaderboardEntry[] {
+  interface Acc {
+    userId: string;
+    username: string | null;
+    games: number;
+    wins: number;
+    scoreSum: number;
+    guessSum: number;
+    best: number | null;
+  }
+  const byUser = new Map<string, Acc>();
   for (const r of rows) {
     let u = byUser.get(r.userId);
     if (!u) {
@@ -63,7 +110,7 @@ export function aggregateLeaderboard(rows) {
     }
     if (r.username) u.username = r.username;
     u.games += 1;
-    u.scoreSum += r.solved ? r.guesses : 7;
+    u.scoreSum += r.solved ? r.guesses : FAIL_SCORE;
     if (r.solved) {
       u.wins += 1;
       u.guessSum += r.guesses;
@@ -80,10 +127,10 @@ export function aggregateLeaderboard(rows) {
       avgGuesses: u.wins ? u.guessSum / u.wins : null,
       best: u.best,
     }))
-    .sort((a, b) => a.avgScore - b.avgScore || b.games - a.games);
+    .sort((a, b) => (a.avgScore ?? 0) - (b.avgScore ?? 0) || b.games - a.games);
 }
 
-export function headToHead(rows1, rows2) {
+export function headToHead(rows1: UserResultRow[], rows2: UserResultRow[]): HeadToHead {
   const other = new Map(rows2.map((r) => [r.number, r]));
   let common = 0;
   let w1 = 0;
@@ -93,8 +140,8 @@ export function headToHead(rows1, rows2) {
     const o = other.get(r.number);
     if (!o) continue;
     common += 1;
-    const s1 = r.solved ? r.guesses : 7;
-    const s2 = o.solved ? o.guesses : 7;
+    const s1 = r.solved ? r.guesses : FAIL_SCORE;
+    const s2 = o.solved ? o.guesses : FAIL_SCORE;
     if (s1 < s2) w1 += 1;
     else if (s2 < s1) w2 += 1;
     else draw += 1;
@@ -102,7 +149,7 @@ export function headToHead(rows1, rows2) {
   return { common, w1, w2, draw };
 }
 
-export function histogram(distribution) {
+export function histogram(distribution: number[]): string {
   const max = Math.max(1, ...distribution);
   return distribution
     .map((count, i) => {
@@ -112,5 +159,5 @@ export function histogram(distribution) {
     .join('\n');
 }
 
-export const pct = (x) => `${Math.round(x * 100)}%`;
-export const fixed = (x, d = 2) => (x == null ? '-' : x.toFixed(d));
+export const pct = (x: number): string => `${Math.round(x * 100)}%`;
+export const fixed = (x: number | null, d = 2): string => (x == null ? '-' : x.toFixed(d));

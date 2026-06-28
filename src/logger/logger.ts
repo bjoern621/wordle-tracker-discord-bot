@@ -4,9 +4,10 @@
 // plus a short human-readable summary on the console.
 
 import 'dotenv/config';
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, type Message, type TextBasedChannel } from 'discord.js';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MESSAGE_PAGE_SIZE } from '../constants.js';
 
 const token = process.env.DISCORD_TOKEN;
 const channelFilter = process.env.WORDLE_CHANNEL_ID?.trim() || null;
@@ -32,6 +33,59 @@ if (saveImages) {
   console.log(`Saving images to ${imagesDir}`);
 }
 
+interface DumpImageRef {
+  url?: string | null;
+  localPath?: string | null;
+  [key: string]: unknown;
+}
+
+interface DumpEmbed {
+  image?: DumpImageRef;
+  thumbnail?: DumpImageRef;
+  title?: string | null;
+  description?: string | null;
+  fields?: unknown[];
+  [key: string]: unknown;
+}
+
+interface DumpAttachment {
+  id: string;
+  name: string | null;
+  url: string;
+  contentType: string | null;
+  width: number | null;
+  height: number | null;
+  size: number;
+  localPath?: string | null;
+}
+
+interface DumpRecord {
+  capturedAt: string;
+  event: string;
+  id: string;
+  createdAt: string | null;
+  editedAt: string | null;
+  guildId: string | null;
+  channelId: string;
+  channelName: string | null;
+  webhookId: string | null;
+  applicationId: string | null;
+  type: number;
+  author: {
+    id: string;
+    username: string;
+    globalName: string | null;
+    bot: boolean;
+    system: boolean;
+  } | null;
+  interactionMetadata: unknown;
+  content: string;
+  embeds: DumpEmbed[];
+  attachments: DumpAttachment[];
+  components: unknown[];
+  stickers: { id: string; name: string }[];
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -40,7 +94,20 @@ const client = new Client({
   ],
 });
 
-function serialize(message, event) {
+function safe<T>(fn: () => T): T | undefined {
+  try {
+    return fn();
+  } catch {
+    return undefined;
+  }
+}
+
+function channelName(message: Message): string | null {
+  const channel = message.channel;
+  return 'name' in channel ? channel.name ?? null : null;
+}
+
+function serialize(message: Message, event: string): DumpRecord {
   return {
     capturedAt: new Date().toISOString(),
     event,
@@ -49,7 +116,7 @@ function serialize(message, event) {
     editedAt: message.editedAt?.toISOString() ?? null,
     guildId: message.guildId,
     channelId: message.channelId,
-    channelName: message.channel?.name ?? null,
+    channelName: channelName(message),
     webhookId: message.webhookId ?? null,
     applicationId: message.applicationId ?? null,
     type: message.type,
@@ -64,7 +131,7 @@ function serialize(message, event) {
       : null,
     interactionMetadata: message.interactionMetadata ?? null,
     content: message.content,
-    embeds: message.embeds.map((e) => e.toJSON()),
+    embeds: message.embeds.map((e) => e.toJSON() as unknown as DumpEmbed),
     attachments: [...message.attachments.values()].map((a) => ({
       id: a.id,
       name: a.name,
@@ -75,23 +142,15 @@ function serialize(message, event) {
       size: a.size,
     })),
     components: safe(() => message.components.map((c) => c.toJSON())) ?? [],
-    stickers: [...(message.stickers?.values() ?? [])].map((s) => ({ id: s.id, name: s.name })),
+    stickers: [...message.stickers.values()].map((s) => ({ id: s.id, name: s.name })),
   };
 }
 
-function safe(fn) {
-  try {
-    return fn();
-  } catch {
-    return undefined;
-  }
-}
-
-function describe(record) {
+function describe(record: DumpRecord): string {
   const who = record.author
     ? `${record.author.username}${record.author.bot ? ' [bot]' : ''} (${record.author.id})`
     : 'unknown';
-  const imageHints = [];
+  const imageHints: string[] = [];
   for (const e of record.embeds) {
     if (e.image?.url) imageHints.push('embed.image');
     if (e.thumbnail?.url) imageHints.push('embed.thumbnail');
@@ -113,9 +172,14 @@ function describe(record) {
   return `[${record.event}] #${record.channelName ?? record.channelId} by ${who} | ${flags}`;
 }
 
-const EXT_BY_TYPE = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+const EXT_BY_TYPE: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
 
-function extFor(contentType, url) {
+function extFor(contentType: string | null | undefined, url: string): string {
   const ct = contentType?.split(';')[0].trim().toLowerCase();
   if (ct && EXT_BY_TYPE[ct]) return EXT_BY_TYPE[ct];
   try {
@@ -129,7 +193,7 @@ function extFor(contentType, url) {
 
 // Downloads url into data/images/<base>.<ext>. Returns the path relative to the
 // dump file (e.g. "images/123-att-456.png") or null on failure.
-async function download(url, base, contentType) {
+async function download(url: string, base: string, contentType?: string | null): Promise<string | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -144,19 +208,21 @@ async function download(url, base, contentType) {
 
 // Mutates the serialized record in place, adding a localPath to every image
 // attachment and to each embed image/thumbnail it manages to download.
-async function saveImageFiles(data) {
+async function saveImageFiles(data: DumpRecord): Promise<void> {
   for (const a of data.attachments) {
     if (!a.contentType?.startsWith('image/')) continue;
     a.localPath = await download(a.url, `${data.id}-att-${a.id}`, a.contentType);
   }
   for (let i = 0; i < data.embeds.length; i += 1) {
     const e = data.embeds[i];
-    if (e.image?.url) e.image.localPath = await download(e.image.url, `${data.id}-emb${i}-image`);
-    if (e.thumbnail?.url) e.thumbnail.localPath = await download(e.thumbnail.url, `${data.id}-emb${i}-thumb`);
+    const image = e.image;
+    if (image?.url) image.localPath = await download(image.url, `${data.id}-emb${i}-image`);
+    const thumb = e.thumbnail;
+    if (thumb?.url) thumb.localPath = await download(thumb.url, `${data.id}-emb${i}-thumb`);
   }
 }
 
-async function record(message, event) {
+async function record(message: Message, event: string): Promise<void> {
   if (channelFilter && message.channelId !== channelFilter) return;
   if (authorFilter && message.author?.id !== authorFilter && message.applicationId !== authorFilter) {
     return;
@@ -167,46 +233,56 @@ async function record(message, event) {
   console.log(describe(data));
 }
 
-async function backfill(channel, limit) {
+async function backfill(channel: TextBasedChannel, limit: number): Promise<number> {
   let remaining = limit;
-  let before;
+  let before: string | undefined;
   let total = 0;
   while (remaining > 0) {
-    const batch = await channel.messages.fetch({ limit: Math.min(100, remaining), before });
+    const batch = await channel.messages.fetch({ limit: Math.min(MESSAGE_PAGE_SIZE, remaining), before });
     if (batch.size === 0) break;
     for (const message of batch.values()) {
       await record(message, 'backfill');
       total += 1;
     }
-    before = batch.last().id;
+    before = batch.last()?.id;
     remaining -= batch.size;
-    if (batch.size < 100) break;
+    if (batch.size < MESSAGE_PAGE_SIZE) break;
   }
   return total;
 }
 
-const onError = (err) => console.error('record failed:', err.message);
-client.on('messageCreate', (message) => record(message, 'create').catch(onError));
-client.on('messageUpdate', (_old, message) => record(message, 'update').catch(onError));
+const onError = (err: unknown): void =>
+  console.error('record failed:', err instanceof Error ? err.message : String(err));
+
+client.on('messageCreate', (message) => {
+  void record(message, 'create').catch(onError);
+});
+client.on('messageUpdate', (_old, message) => {
+  const full = message.partial ? message.fetch() : Promise.resolve(message);
+  void full.then((m) => record(m, 'update')).catch(onError);
+});
 
 client.once('clientReady', async () => {
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`Logged in as ${client.user?.tag}`);
   console.log('Channels visible to the bot (use one of these IDs for WORDLE_CHANNEL_ID):');
   for (const guild of client.guilds.cache.values()) {
     console.log(`  Guild: ${guild.name} (${guild.id})`);
     for (const ch of guild.channels.cache.values()) {
-      if (ch.isTextBased?.()) console.log(`    #${ch.name} -> ${ch.id}`);
+      if (ch.isTextBased()) console.log(`    #${ch.name} -> ${ch.id}`);
     }
   }
 
   if (backfillLimit > 0 && channelFilter) {
     try {
       const channel = await client.channels.fetch(channelFilter);
-      console.log(`Backfilling up to ${backfillLimit} past messages from #${channel.name}...`);
-      const total = await backfill(channel, backfillLimit);
-      console.log(`Backfill done: ${total} messages dumped.`);
+      if (channel?.isTextBased()) {
+        const name = 'name' in channel ? channel.name : channel.id;
+        console.log(`Backfilling up to ${backfillLimit} past messages from #${name}...`);
+        const total = await backfill(channel, backfillLimit);
+        console.log(`Backfill done: ${total} messages dumped.`);
+      }
     } catch (err) {
-      console.error('Backfill failed:', err.message);
+      console.error('Backfill failed:', err instanceof Error ? err.message : String(err));
     }
   } else if (backfillLimit > 0) {
     console.log('BACKFILL_LIMIT is set but WORDLE_CHANNEL_ID is empty. Set the channel ID to backfill.');
