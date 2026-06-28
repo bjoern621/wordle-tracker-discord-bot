@@ -1,15 +1,54 @@
 services:
-  # The tracker. Run with: docker compose up -d bot
+  # PostgreSQL, its own container with a named volume so data survives restarts.
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wordle
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wordle}
+      POSTGRES_DB: wordle
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wordle -d wordle"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Declarative schema: pgschema diffs db/schema.sql against the database and
+  # applies the difference, then exits. Runs once before the bot starts.
+  migrate:
+    image: pgschema/pgschema:latest
+    environment:
+      PGHOST: db
+      PGDATABASE: wordle
+      PGUSER: wordle
+      PGPASSWORD: ${POSTGRES_PASSWORD:-wordle}
+    command: apply --file /schema/schema.sql --auto-approve
+    volumes:
+      - ./db:/schema:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # The tracker. Starts once the schema has been applied.
   bot:
     build: .
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql://wordle:${POSTGRES_PASSWORD:-wordle}@db:5432/wordle
     command: node src/bot.js
-    volumes:
-      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
-  # Phase 0 diagnostic: dump raw messages/embeds to ./data to inspect formats.
-  # Run with: docker compose up logger   (not started by default)
+  # Phase 0 diagnostic: dump raw messages/embeds to ./data. Run: docker compose up logger
   logger:
     build: .
     env_file: .env
@@ -19,3 +58,6 @@ services:
     profiles:
       - tools
     restart: "no"
+
+volumes:
+  pgdata:

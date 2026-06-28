@@ -1,0 +1,82 @@
+version: "3"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  setup:
+    desc: Create .env from .env.example if it does not exist
+    cmds:
+      - cp .env.example .env
+    status:
+      - test -f .env
+
+  up:
+    desc: Build and start everything (db, migrate, bot)
+    cmds:
+      - docker compose up -d --build
+
+  down:
+    desc: Stop and remove containers (keeps the database volume)
+    cmds:
+      - docker compose down
+
+  restart:
+    desc: Restart the bot
+    cmds:
+      - docker compose restart bot
+
+  build:
+    desc: Build the bot image
+    cmds:
+      - docker compose build bot
+
+  logs:
+    desc: Follow the bot logs
+    cmds:
+      - docker compose logs -f bot
+
+  ps:
+    desc: Show service status
+    cmds:
+      - docker compose ps
+
+  db:
+    desc: Start only the PostgreSQL service
+    cmds:
+      - docker compose up -d db
+
+  migrate:
+    desc: Apply db/schema.sql to the database (pgschema)
+    cmds:
+      - docker compose run --rm migrate
+
+  plan:
+    desc: Show pending schema changes without applying them (pgschema plan)
+    cmds:
+      - docker compose run --rm migrate plan --file /schema/schema.sql
+
+  psql:
+    desc: Open a psql shell in the database container
+    cmds:
+      - docker compose exec db psql -U wordle -d wordle
+
+  pgcli:
+    desc: Open pgcli against the database (needs the nix shell and a running db)
+    cmds:
+      - pgcli "$DATABASE_URL"
+
+  logger:
+    desc: Run the Phase 0 logger, dumping raw messages/embeds to ./data
+    cmds:
+      - docker compose run --rm logger
+
+  reset:
+    desc: Wipe the database volume and restart (DESTROYS all stored results)
+    prompt: This deletes all stored results. Continue?
+    cmds:
+      - docker compose down -v
+      - task: up

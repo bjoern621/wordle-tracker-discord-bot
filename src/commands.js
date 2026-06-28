@@ -4,9 +4,9 @@ import {
   PermissionFlagsBits,
   MessageFlags,
 } from 'discord.js';
-import { getLeaderboard, getUserRows } from './db.js';
+import { getResults, getUserResults } from './db.js';
 import { periodRange } from './wordle.js';
-import { summarize, headToHead, histogram, pct, fixed } from './stats.js';
+import { summarize, headToHead, histogram, pct, fixed, aggregateLeaderboard } from './stats.js';
 import { backfillChannel } from './backfill.js';
 import { config } from './config.js';
 
@@ -31,7 +31,7 @@ const leaderboard = {
   async execute(interaction) {
     const period = interaction.options.getString('period') || 'all';
     const [from, to] = periodRange(period, config.timeZone);
-    const rows = getLeaderboard(interaction.guildId, from, to);
+    const rows = aggregateLeaderboard(await getResults(interaction.guildId, from, to));
     if (!rows.length) {
       await interaction.reply('No Wordle results recorded for that period yet.');
       return;
@@ -60,7 +60,7 @@ const stats = {
     const user = interaction.options.getUser('user') || interaction.user;
     const period = interaction.options.getString('period') || 'all';
     const [from, to] = periodRange(period, config.timeZone);
-    const rows = getUserRows(interaction.guildId, user.id, from, to);
+    const rows = await getUserResults(interaction.guildId, user.id, from, to);
     if (!rows.length) {
       await interaction.reply(`No results recorded for ${user.username} in that period.`);
       return;
@@ -92,7 +92,7 @@ const distribution = {
   async execute(interaction) {
     const user = interaction.options.getUser('user') || interaction.user;
     const [from, to] = periodRange('all');
-    const rows = getUserRows(interaction.guildId, user.id, from, to);
+    const rows = await getUserResults(interaction.guildId, user.id, from, to);
     if (!rows.length) {
       await interaction.reply(`No results recorded for ${user.username}.`);
       return;
@@ -120,8 +120,8 @@ const compare = {
       return;
     }
     const [from, to] = periodRange('all');
-    const rows1 = getUserRows(interaction.guildId, u1.id, from, to);
-    const rows2 = getUserRows(interaction.guildId, u2.id, from, to);
+    const rows1 = await getUserResults(interaction.guildId, u1.id, from, to);
+    const rows2 = await getUserResults(interaction.guildId, u2.id, from, to);
     const h = headToHead(rows1, rows2);
     if (h.common === 0) {
       await interaction.reply(`${u1.username} and ${u2.username} have no puzzles in common yet.`);

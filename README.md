@@ -2,7 +2,7 @@
 
 Tracks Wordle results in a Discord server and builds leaderboards (all-time,
 monthly, weekly), per-player stats, and head-to-head comparisons. Self-hosted,
-single server, SQLite storage.
+single server, PostgreSQL storage (schema via pgschema, queries via node-postgres).
 
 ## How results are captured
 
@@ -23,6 +23,13 @@ The bot reads three sources, in priority order:
    `ENABLE_ACTIVITY_IMAGE`.
 
 ## Storage
+
+PostgreSQL. The schema is declared as desired-state SQL in
+[db/schema.sql](db/schema.sql) and applied by [pgschema](https://www.pgschema.com),
+which diffs it against the live database and applies the difference (a one-shot
+`migrate` service that runs before the bot). Queries use node-postgres directly.
+Postgres runs as its own container with a named volume, so data persists across
+restarts.
 
 One row per (server, player, puzzle) is the single source of truth for a game.
 It holds the puzzle number, win/loss, guess count, and the per-guess colour grid
@@ -61,16 +68,43 @@ cp .env.example .env
 ```
 Set `DISCORD_TOKEN`, and `WORDLE_CHANNEL_ID` to the Wordle channel (enable
 Developer Mode, right-click the channel -> Copy Channel ID). To import existing
-history on first run, set `BACKFILL_ON_START=true`.
+history on first run, set `BACKFILL_ON_START=true`. Optionally set
+`POSTGRES_PASSWORD`.
 
 ### 3. Run
 
+Three separate services: `db` (Postgres), `migrate` (pgschema, applies the schema
+once and exits), and `bot`. Compose starts them in order: Postgres becomes
+healthy, the schema is applied, then the bot starts.
+
 ```sh
-docker compose up -d --build bot
+docker compose up -d --build       # starts db, runs migrate, starts bot
 docker compose logs -f bot
 ```
 
-## Commands
+To run them separately: `docker compose up -d db`, apply the schema with
+`docker compose run --rm migrate`, then `docker compose up -d bot`. The Postgres
+data lives in the `pgdata` volume and survives `docker compose down` (use
+`docker compose down -v` to wipe it). After editing `db/schema.sql`, re-run the
+`migrate` service to converge the database; it is a no-op when already in sync.
+
+## Task runner
+
+Common operations are wrapped in [Taskfile.yml](Taskfile.yml); the `task` binary
+is in the Nix dev shell. Run `task --list` for the full set.
+
+| Task | Description |
+| --- | --- |
+| `task up` | Build and start everything (db, migrate, bot). |
+| `task down` | Stop containers (keeps the database volume). |
+| `task logs` | Follow the bot logs. |
+| `task migrate` | Apply `db/schema.sql` (pgschema). |
+| `task plan` | Show pending schema changes without applying. |
+| `task psql` | Open a psql shell in the db container. |
+| `task logger` | Run the Phase 0 logger. |
+| `task reset` | Wipe the database volume and restart (destructive). |
+
+## Slash commands
 
 | Command | Description |
 | --- | --- |
@@ -85,24 +119,22 @@ Lower average is better.
 
 ## Inspecting the database
 
-A Nix flake provides a dev shell with tools to browse the SQLite database.
-Flakes only see git-tracked files, so add the flake first:
+A Nix flake provides a dev shell with tools to browse the PostgreSQL database
+(`dbeaver-bin` GUI, `pgcli`, `psql`). Flakes only see git-tracked files, so add
+the flake first:
 
 ```sh
 git add flake.nix flake.lock .envrc
 direnv allow                 # once; loads the flake via .envrc (use flake)
-sqlitebrowser "$WORDLE_DB"   # GUI
-litecli "$WORDLE_DB"         # REPL, or: sqlite3 "$WORDLE_DB"
+
+docker compose up -d db      # if not already running
+pgcli "$DATABASE_URL"        # REPL, or: psql "$DATABASE_URL"
+dbeaver                      # GUI; connect to $DATABASE_URL
 ```
 
-Without direnv, run `nix develop` to get the same environment.
-
-The bot container runs as root, so `data/wordle.db` is root-owned. Open it
-read-only, or take ownership for full access:
-
-```sh
-sudo chown -R "$USER" data
-```
+`$DATABASE_URL` is set by the shell to `localhost:$POSTGRES_PORT`. Without
+direnv, run `nix develop` for the same environment. To inspect without exposing a
+port, use `docker compose exec db psql -U wordle wordle`.
 
 ## Diagnostics
 
@@ -122,7 +154,10 @@ docker compose up logger
 | `TIMEZONE` | `Europe/Berlin` | Group timezone for resolving the daily summary's "yesterday". |
 | `PLAYER_ALIASES` | (empty) | `Name=id,...` overrides for unresolved plain-text players. |
 | `ENABLE_ACTIVITY_IMAGE` | `true` | Parse the per-game grid image for same-day results. |
-| `DB_PATH` | `data/wordle.db` | SQLite file location. |
+| `DATABASE_URL` | (set by compose) | Postgres connection string. Compose points it at the `db` service. |
+| `POSTGRES_PASSWORD` | `wordle` | Password for the bundled Postgres container. |
+| `POSTGRES_PORT` | `5432` | Host port Postgres is exposed on. |
 | `CONFIRM_REACTION` | `✅` | Reaction added when a result is captured. Empty to disable. |
+| `OVERRIDE_REACTION` | `🔁` | Reaction when a newer message corrects a stored result. |
 | `BACKFILL_ON_START` | `false` | Scan history once on startup. |
 | `BACKFILL_LIMIT` | `5000` | Messages scanned per backfill. |

@@ -17,7 +17,6 @@ export const config = {
   guildId: process.env.GUILD_ID?.trim() || null,
   // Restrict ingestion to one channel. Empty means any channel the bot can see.
   channelId: process.env.WORDLE_CHANNEL_ID?.trim() || null,
-  dbPath: process.env.DB_PATH?.trim() || 'data/wordle.db',
   // Group timezone. Daily summaries report "yesterday", resolved in this zone.
   timeZone: process.env.TIMEZONE?.trim() || 'Europe/Berlin',
   // Manual name -> user-id overrides for summary entries that are plain @text.

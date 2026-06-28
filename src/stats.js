@@ -50,6 +50,39 @@ function streaks(rows) {
   return { current, longest };
 }
 
+// Groups raw result rows into a leaderboard, ranked by average score (failed
+// games count as 7), then by games played. Replaces SQL-side aggregation so the
+// query layer stays database-agnostic.
+export function aggregateLeaderboard(rows) {
+  const byUser = new Map();
+  for (const r of rows) {
+    let u = byUser.get(r.userId);
+    if (!u) {
+      u = { userId: r.userId, username: r.username, games: 0, wins: 0, scoreSum: 0, guessSum: 0, best: null };
+      byUser.set(r.userId, u);
+    }
+    if (r.username) u.username = r.username;
+    u.games += 1;
+    u.scoreSum += r.solved ? r.guesses : 7;
+    if (r.solved) {
+      u.wins += 1;
+      u.guessSum += r.guesses;
+      u.best = u.best == null ? r.guesses : Math.min(u.best, r.guesses);
+    }
+  }
+  return [...byUser.values()]
+    .map((u) => ({
+      userId: u.userId,
+      username: u.username,
+      games: u.games,
+      wins: u.wins,
+      avgScore: u.games ? u.scoreSum / u.games : null,
+      avgGuesses: u.wins ? u.guessSum / u.wins : null,
+      best: u.best,
+    }))
+    .sort((a, b) => a.avgScore - b.avgScore || b.games - a.games);
+}
+
 export function headToHead(rows1, rows2) {
   const other = new Map(rows2.map((r) => [r.number, r]));
   let common = 0;

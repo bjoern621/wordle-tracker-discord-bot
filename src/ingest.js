@@ -4,25 +4,24 @@ import { numberToIso } from './wordle.js';
 import { learnUser, resolve, syntheticId } from './identity.js';
 import { config } from './config.js';
 
-function sourceTs(message) {
-  return (message.editedAt ?? message.createdAt).getTime();
+function messageTs(message) {
+  return message.editedAt ?? message.createdAt; // Date; most recent wins on conflict
 }
 
 function store(o) {
   return recordResult({
-    guild_id: o.guildId,
-    user_id: o.userId,
-    puzzle_number: o.number,
-    puzzle_date: numberToIso(o.number),
+    guildId: o.guildId,
+    userId: o.userId,
+    puzzleNumber: o.number,
+    puzzleDate: numberToIso(o.number),
     guesses: o.guesses,
-    solved: o.solved ? 1 : 0,
+    solved: !!o.solved,
     grid: o.grid ? JSON.stringify(o.grid) : null,
-    hard_mode: o.hardMode == null ? null : o.hardMode ? 1 : 0,
+    hardMode: !!o.hardMode,
     source: o.source,
-    source_ts: o.sourceTs,
+    messageTs: o.messageTs,
     username: o.username,
-    message_id: o.messageId,
-    updated_at: new Date().toISOString(),
+    messageId: o.messageId,
   });
 }
 
@@ -32,7 +31,7 @@ function store(o) {
 export async function ingestMessage(message) {
   if (config.guildId && message.guildId !== config.guildId) return null;
   if (config.channelId && message.channelId !== config.channelId) return null;
-  const ts = sourceTs(message);
+  const ts = messageTs(message);
 
   if (message.interactionMetadata?.user) learnUser(message.interactionMetadata.user);
   if (message.author && !message.author.bot) learnUser(message.author);
@@ -48,18 +47,18 @@ export async function ingestMessage(message) {
         unresolved.push(r.name);
         who = syntheticId(r.name);
       }
-      const status = store({
+      const status = await store({
         guildId: message.guildId,
         userId: who.id,
         number: summary.number,
         guesses: r.guesses,
         solved: r.solved,
         grid: null,
-        hardMode: null,
+        hardMode: false,
         source: 'summary',
         username: who.name,
         messageId: message.id,
-        sourceTs: ts,
+        messageTs: ts,
       });
       if (status === 'updated') changed = true;
     }
@@ -72,7 +71,7 @@ export async function ingestMessage(message) {
   // 2. Manual share text from any human (carries the colour grid).
   const text = parseShareText(message.content);
   if (text && message.author && !message.author.system) {
-    const status = store({
+    const status = await store({
       guildId: message.guildId,
       userId: message.author.id,
       number: text.number,
@@ -83,7 +82,7 @@ export async function ingestMessage(message) {
       source: 'text',
       username: message.author.globalName || message.author.username,
       messageId: message.id,
-      sourceTs: ts,
+      messageTs: ts,
     });
     return { source: 'text', count: 1, changed: status === 'updated' };
   }
@@ -92,7 +91,7 @@ export async function ingestMessage(message) {
   if (config.enableActivityImage) {
     const activity = await parseActivityMessage(message, config.timeZone);
     if (activity) {
-      const status = store({
+      const status = await store({
         guildId: message.guildId,
         userId: activity.user.id,
         number: activity.number,
@@ -103,7 +102,7 @@ export async function ingestMessage(message) {
         source: 'activity',
         username: activity.user.name,
         messageId: message.id,
-        sourceTs: ts,
+        messageTs: ts,
       });
       return { source: 'activity', count: 1, changed: status === 'updated' };
     }

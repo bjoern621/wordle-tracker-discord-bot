@@ -1,9 +1,8 @@
-# Debian-based image so better-sqlite3 installs from a prebuilt binary, with
-# build tools present as a fallback for architectures without one (e.g. ARM Pi).
+# ca-certificates is needed for HTTPS fetches of the Activity's grid images.
 FROM node:22-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
+  && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
