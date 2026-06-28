@@ -5,13 +5,16 @@
 
 import 'dotenv/config';
 import { Client, GatewayIntentBits } from 'discord.js';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const token = process.env.DISCORD_TOKEN;
 const channelFilter = process.env.WORDLE_CHANNEL_ID?.trim() || null;
 const authorFilter = process.env.WORDLE_APP_ID?.trim() || null;
 const backfillLimit = Number.parseInt(process.env.BACKFILL_LIMIT ?? '0', 10) || 0;
+// When set, image attachments and embed images are downloaded next to the dump
+// so the grid parser can be tested and re-tuned offline (CDN URLs expire).
+const saveImages = /^(1|true|yes)$/i.test(process.env.SAVE_IMAGES ?? '');
 
 if (!token) {
   console.error('DISCORD_TOKEN is missing. Copy .env.example to .env and fill it in.');
@@ -22,6 +25,12 @@ const dataDir = join(process.cwd(), 'data');
 mkdirSync(dataDir, { recursive: true });
 const outFile = join(dataDir, `dump-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`);
 console.log(`Writing raw dumps to ${outFile}`);
+
+const imagesDir = join(dataDir, 'images');
+if (saveImages) {
+  mkdirSync(imagesDir, { recursive: true });
+  console.log(`Saving images to ${imagesDir}`);
+}
 
 const client = new Client({
   intents: [
@@ -104,12 +113,56 @@ function describe(record) {
   return `[${record.event}] #${record.channelName ?? record.channelId} by ${who} | ${flags}`;
 }
 
-function record(message, event) {
+const EXT_BY_TYPE = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+
+function extFor(contentType, url) {
+  const ct = contentType?.split(';')[0].trim().toLowerCase();
+  if (ct && EXT_BY_TYPE[ct]) return EXT_BY_TYPE[ct];
+  try {
+    const m = new URL(url).pathname.match(/\.([a-z0-9]+)$/i);
+    if (m) return m[1].toLowerCase();
+  } catch {
+    /* fall through */
+  }
+  return 'bin';
+}
+
+// Downloads url into data/images/<base>.<ext>. Returns the path relative to the
+// dump file (e.g. "images/123-att-456.png") or null on failure.
+async function download(url, base, contentType) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const name = `${base}.${extFor(contentType ?? res.headers.get('content-type'), url)}`;
+    writeFileSync(join(imagesDir, name), buf);
+    return join('images', name);
+  } catch {
+    return null;
+  }
+}
+
+// Mutates the serialized record in place, adding a localPath to every image
+// attachment and to each embed image/thumbnail it manages to download.
+async function saveImageFiles(data) {
+  for (const a of data.attachments) {
+    if (!a.contentType?.startsWith('image/')) continue;
+    a.localPath = await download(a.url, `${data.id}-att-${a.id}`, a.contentType);
+  }
+  for (let i = 0; i < data.embeds.length; i += 1) {
+    const e = data.embeds[i];
+    if (e.image?.url) e.image.localPath = await download(e.image.url, `${data.id}-emb${i}-image`);
+    if (e.thumbnail?.url) e.thumbnail.localPath = await download(e.thumbnail.url, `${data.id}-emb${i}-thumb`);
+  }
+}
+
+async function record(message, event) {
   if (channelFilter && message.channelId !== channelFilter) return;
   if (authorFilter && message.author?.id !== authorFilter && message.applicationId !== authorFilter) {
     return;
   }
   const data = serialize(message, event);
+  if (saveImages) await saveImageFiles(data);
   appendFileSync(outFile, `${JSON.stringify(data)}\n`);
   console.log(describe(data));
 }
@@ -122,7 +175,7 @@ async function backfill(channel, limit) {
     const batch = await channel.messages.fetch({ limit: Math.min(100, remaining), before });
     if (batch.size === 0) break;
     for (const message of batch.values()) {
-      record(message, 'backfill');
+      await record(message, 'backfill');
       total += 1;
     }
     before = batch.last().id;
@@ -132,8 +185,9 @@ async function backfill(channel, limit) {
   return total;
 }
 
-client.on('messageCreate', (message) => record(message, 'create'));
-client.on('messageUpdate', (_old, message) => record(message, 'update'));
+const onError = (err) => console.error('record failed:', err.message);
+client.on('messageCreate', (message) => record(message, 'create').catch(onError));
+client.on('messageUpdate', (_old, message) => record(message, 'update').catch(onError));
 
 client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag}`);
