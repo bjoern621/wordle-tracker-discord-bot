@@ -16,11 +16,15 @@ export const backfillCommand: BotCommand = {
     .addIntegerOption((o) =>
       o.setName('limit').setDescription('How many past messages to scan').setMinValue(1).setMaxValue(10000),
     )
+    .addBooleanOption((o) =>
+      o.setName('all').setDescription('Scan the entire channel history (ignores limit)'),
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const limit = interaction.options.getInteger('limit') ?? config.backfillLimit;
+    const scanAll = interaction.options.getBoolean('all') ?? false;
+    const limit = scanAll ? undefined : interaction.options.getInteger('limit') ?? config.backfillLimit;
     // WORDLE_CHANNEL_ID is required and validated in-guild at startup, so this is
     // always the configured channel of the server the command runs in.
     const channel = await interaction.client.channels.fetch(config.channelId);
@@ -28,7 +32,11 @@ export const backfillCommand: BotCommand = {
       await interaction.editReply('The configured channel is no longer a readable text channel.');
       return;
     }
-    const { processed, stored } = await backfillChannel(channel, limit);
-    await interaction.editReply(`Scanned ${processed} messages, stored ${stored} results.`);
+    const { processed, stored, limitReached } = await backfillChannel(channel, limit);
+    let reply = `Scanned ${processed} messages, stored ${stored} results.`;
+    if (limitReached) {
+      reply += ` Reached the ${limit}-message limit, there may be more messages to parse. Raise \`limit\` or run with \`all: true\`.`;
+    }
+    await interaction.editReply(reply);
   },
 };

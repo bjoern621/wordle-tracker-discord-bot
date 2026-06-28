@@ -38,8 +38,13 @@ client.once(Events.ClientReady, async (ready) => {
   if (config.backfillOnStart) {
     try {
       console.log('Backfilling channel history...');
-      const { processed, stored } = await backfillChannel(channel, config.backfillLimit);
+      const { processed, stored, limitReached } = await backfillChannel(channel, config.backfillLimit);
       console.log(`Backfill done: scanned ${processed}, stored ${stored}.`);
+      if (limitReached) {
+        console.warn(
+          `Backfill stopped at the ${config.backfillLimit}-message limit; there may be more history to parse. Raise BACKFILL_LIMIT or run /backfill all:true.`,
+        );
+      }
     } catch (err) {
       console.error('Backfill on start failed:', errMessage(err));
     }
