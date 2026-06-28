@@ -12,14 +12,14 @@ function messageTimestamp(message: Message): Date {
 }
 
 // Index whoever appears on the message so later summaries can resolve plain @names.
-function learnFrom(message: Message): void {
-  if (message.interactionMetadata?.user) learnUser(message.interactionMetadata.user);
-  if (message.author && !message.author.bot) learnUser(message.author);
+function learnFrom(guildId: string, message: Message): void {
+  if (message.interactionMetadata?.user) learnUser(guildId, message.interactionMetadata.user);
+  if (message.author && !message.author.bot) learnUser(guildId, message.author);
 }
 
-function resolvePlayer(ref: PlayerRef, unresolved: string[]): KnownUser {
+function resolvePlayer(guildId: string, ref: PlayerRef, unresolved: string[]): KnownUser {
   if (ref.kind === 'known') return ref.user;
-  const resolved = resolve(ref);
+  const resolved = resolve(guildId, ref);
   if (resolved) return resolved;
   const label = ref.name ?? ref.id ?? 'unknown';
   unresolved.push(label);
@@ -36,7 +36,7 @@ async function storeGames(
   const unresolved: string[] = [];
   let changed = false;
   for (const game of games) {
-    const who = resolvePlayer(game.player, unresolved);
+    const who = resolvePlayer(guildId, game.player, unresolved);
     const status = await recordResult({
       guildId,
       userId: who.id,
@@ -71,7 +71,7 @@ export async function ingestMessage(message: Message): Promise<IngestOutcome | n
   if (!guildId) return null;
   if (message.channelId !== trackedChannel(guildId)) return null;
 
-  learnFrom(message);
+  learnFrom(guildId, message);
 
   const ctx: ParseContext = { timeZone: config.timeZone, enableActivityImage: config.enableActivityImage };
   const ts = messageTimestamp(message);
