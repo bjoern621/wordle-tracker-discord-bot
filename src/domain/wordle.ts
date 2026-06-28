@@ -77,3 +77,15 @@ export function periodRange(period: Period, timeZone = 'UTC'): [string, string] 
   }
   return ['0000-01-01', '9999-12-31'];
 }
+
+/**
+ * Inclusive [from, to] ISO bounds for the Monday-Sunday week before the one
+ * containing `now`, in `timeZone`. Run on a Monday, this is the week that just
+ * ended; run any other day, it is still the previous calendar week.
+ */
+export function lastWeekRange(timeZone = 'UTC', now: Date = new Date()): [string, string] {
+  const todayIso = localDateISO(now, timeZone);
+  const dow = (new Date(`${todayIso}T00:00:00Z`).getUTCDay() + 6) % 7; // 0 = Monday
+  const thisMonday = shiftISO(todayIso, -dow);
+  return [shiftISO(thisMonday, -7), shiftISO(thisMonday, -1)];
+}

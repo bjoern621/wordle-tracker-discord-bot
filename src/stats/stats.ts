@@ -3,6 +3,7 @@
 
 import type { DailyResultRow, LeaderboardRow, UserResultRow } from '../db/results.repository.js';
 import { FAIL_SCORE } from '../constants.js';
+import { effectiveHardMode } from '../domain/hard-mode.js';
 
 export interface PlayerSummary {
   games: number;
@@ -14,6 +15,8 @@ export interface PlayerSummary {
   distribution: number[];
   current: number;
   longest: number;
+  /** Games played in hard mode, counting grid-inferred "probably hard mode". */
+  hardMode: number;
 }
 
 export interface LeaderboardEntry {
@@ -51,6 +54,7 @@ export function summarize(rows: UserResultRow[]): PlayerSummary {
     avgScore,
     best: solvedGuesses.length ? Math.min(...solvedGuesses) : null,
     distribution,
+    hardMode: rows.filter(effectiveHardMode).length,
     ...streaks(rows),
   };
 }

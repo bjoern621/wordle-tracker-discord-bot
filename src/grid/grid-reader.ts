@@ -4,61 +4,25 @@
 // they survive any uniform rescaling of the image.
 
 import { PNG } from 'pngjs';
+import { cellChar, sampleCell, type GridResult } from './cell.js';
+
+export type { GridResult };
 
 const COL_FRACS = [0.551, 0.598, 0.645, 0.691, 0.738];
 const ROW_FRACS = [0.371, 0.457, 0.543, 0.629, 0.714, 0.8];
 const PATCH = 4; // half-width of the averaged sample square, in pixels
 
-type Cell = 'green' | 'yellow' | 'absent' | 'empty' | 'other';
-
-export interface GridResult {
-  guesses: number;
-  solved: boolean;
-  /** Per-guess colour rows (B/Y/G), one string of five characters each. */
-  patterns: string[];
-}
-
-function classify(r: number, g: number, b: number): Cell {
-  const bright = (r + g + b) / 3;
-  const spread = Math.max(r, g, b) - Math.min(r, g, b);
-  if (g > r + 25 && g > b + 25 && g > 70) return 'green';
-  if (r > 130 && g > 110 && b < 100 && r > b + 40) return 'yellow';
-  if (spread < 22 && bright >= 45 && bright <= 120) return 'absent';
-  if (bright < 45) return 'empty';
-  return 'other';
-}
-
-function sampleCell(png: PNG, cx: number, cy: number): Cell {
-  const { width, height, data } = png;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let n = 0;
-  for (let y = cy - PATCH; y <= cy + PATCH; y += 1) {
-    for (let x = cx - PATCH; x <= cx + PATCH; x += 1) {
-      if (x < 0 || y < 0 || x >= width || y >= height) continue;
-      const i = (y * width + x) * 4;
-      r += data[i];
-      g += data[i + 1];
-      b += data[i + 2];
-      n += 1;
-    }
-  }
-  return classify(r / n, g / n, b / n);
-}
-
-// B/Y/G pattern per cell, matching the manual share-text representation.
-const CHAR: Record<Cell, string> = { green: 'G', yellow: 'Y', absent: 'B', empty: 'B', other: 'B' };
-
 /**
- * Returns the finished game's grid, or null when the grid is empty or the game
- * is still in progress (fewer than 6 rows and not solved).
+ * Returns the grid read from the image, or null when it is empty (no guess
+ * played). A non-terminal grid (fewer than six rows and not solved) is returned
+ * with `complete: false`; the caller decides whether an unfinished game counts
+ * as still in progress or as abandoned.
  */
 export function parseGrid(buffer: Buffer): GridResult | null {
   const png = PNG.sync.read(buffer);
   const rows = ROW_FRACS.map((ry) => {
     const cy = Math.round(ry * png.height);
-    return COL_FRACS.map((rx) => sampleCell(png, Math.round(rx * png.width), cy));
+    return COL_FRACS.map((rx) => sampleCell(png, Math.round(rx * png.width), cy, PATCH));
   });
 
   const filled = rows.filter((cells) => cells.some((c) => c !== 'empty'));
@@ -66,8 +30,7 @@ export function parseGrid(buffer: Buffer): GridResult | null {
   if (guesses === 0) return null;
 
   const solved = filled[filled.length - 1].every((c) => c === 'green');
-  const terminal = solved || guesses === 6;
-  if (!terminal) return null;
+  const complete = solved || guesses === 6;
 
-  return { guesses, solved, patterns: filled.map((cells) => cells.map((c) => CHAR[c]).join('')) };
+  return { guesses, solved, complete, patterns: filled.map((cells) => cells.map(cellChar).join('')) };
 }

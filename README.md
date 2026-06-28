@@ -117,6 +117,7 @@ is in the Nix dev shell. Run `task --list` for the full set.
 | Command | Description |
 | --- | --- |
 | `/leaderboard [period]` | Ranking by average score. Period: all / month / week. |
+| `/weekly` | This week's results as a day-by-day grid, one row per player. |
 | `/stats [user] [period]` | Games, win rate, averages, streaks, distribution. |
 | `/distribution [user]` | Guess distribution histogram. |
 | `/compare <user1> [user2]` | Head-to-head over shared puzzles. |
@@ -125,6 +126,13 @@ is in the Nix dev shell. Run `task --list` for the full set.
 
 Scoring: a solved game scores its number of guesses; a failed game scores 7.
 Lower average is better.
+
+## Weekly report
+
+Every Monday at 00:05 in the group timezone (`TIMEZONE`), the bot posts last
+week's recap to each server's tracked channel: the same day-by-day grid as
+`/weekly`, covering the Monday-Sunday week that just ended. Servers where nobody
+played that week are skipped.
 
 ## Inspecting the database
 
@@ -150,6 +158,21 @@ inspecting new formats:
 ```sh
 task logger
 ```
+
+With `SAVE_IMAGES=true`, every image the Activity posts is downloaded and sorted
+by message kind into `data/images/<category>/`, each file prefixed with the
+puzzle number it belongs to:
+
+| Category | Source message | Image |
+| --- | --- | --- |
+| `summary` | "here are yesterday's results" | The day-summary board: every player's grid for one day. |
+| `solo` | "X was playing" | One player's grid. |
+| `multi` | "X and N others were playing" | The combined grid for several players. |
+| `other` | Any non-Activity author | Whatever that message attached (only when no author filter is set). |
+
+This keeps a replayable corpus after the Discord CDN URLs expire. A captured
+`summary` or `multi` board can be copied straight into `test/fixtures/images/`
+to back a parser test, the same way the `solo` grids back the existing ones.
 
 ## Configuration reference
 

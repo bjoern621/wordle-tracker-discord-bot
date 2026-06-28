@@ -3,8 +3,13 @@ import assert from 'node:assert/strict';
 import { summarize, aggregateLeaderboard, buildWeeklyGrid, headToHead } from '../src/stats/stats.js';
 import type { DailyResultRow, LeaderboardRow, UserResultRow } from '../src/db/results.repository.js';
 
-function userRow(number: number, guesses: number, solved: boolean): UserResultRow {
-  return { number, date: numberToDate(number), guesses, solved, grid: null, hardMode: false };
+function userRow(
+  number: number,
+  guesses: number,
+  solved: boolean,
+  extra: Partial<UserResultRow> = {},
+): UserResultRow {
+  return { number, date: numberToDate(number), guesses, solved, grid: null, hardMode: false, source: 'summary', ...extra };
 }
 const numberToDate = (n: number) => `2026-01-${String(n).padStart(2, '0')}`;
 
@@ -26,6 +31,19 @@ test('summarize counts wins, averages, distribution and streaks', () => {
   assert.deepEqual(s.distribution, [0, 1, 1, 1, 1, 0]);
   assert.equal(s.longest, 2); // 1-2 and 4-5
   assert.equal(s.current, 2); // latest solve 5, back through 4
+});
+
+test('summarize counts hard mode, reported or grid-inferred', () => {
+  const compliant = JSON.stringify(['BYBBB', 'GBYBB', 'GGGGG']); // greens persist, count rises
+  const violation = JSON.stringify(['GYBBB', 'BGBBB', 'GGGGG']); // col 0 green then not green
+  const s = summarize([
+    userRow(1, 3, true, { source: 'share-text', hardMode: true }), // reported on
+    userRow(2, 3, true, { source: 'share-text', hardMode: false }), // reported off, grid ignored
+    userRow(3, 3, true, { source: 'activity', grid: compliant }), // probably hard mode
+    userRow(4, 3, true, { source: 'activity', grid: violation }), // grid rules it out
+    userRow(5, 3, true, { source: 'summary' }), // no grid, no report
+  ]);
+  assert.equal(s.hardMode, 2); // the reported-on game and the compliant grid
 });
 
 test('summarize handles an all-empty history', () => {

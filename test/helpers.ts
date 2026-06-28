@@ -12,18 +12,26 @@ export interface FakeAuthor {
   system?: boolean;
 }
 
+export interface FakeAttachment {
+  url: string;
+  contentType?: string;
+}
+
 export interface FakeMessageInit {
   content?: string;
   author?: FakeAuthor | null;
   createdAt?: Date;
   /** When set, exposed as interactionMetadata.user (the activity player). */
   interactionUser?: FakeAuthor;
+  /** Image attachments the activity-image parser fetches. */
+  attachments?: FakeAttachment[];
 }
 
 const DEFAULT_AUTHOR: FakeAuthor = { id: 'user-1', username: 'tester' };
 
 export function fakeMessage(init: FakeMessageInit = {}): Message {
   const author = init.author === undefined ? DEFAULT_AUTHOR : init.author;
+  const attachments = new Map((init.attachments ?? []).map((a, i) => [String(i), a]));
   return {
     content: init.content ?? '',
     author: author ? { globalName: null, bot: false, system: false, ...author } : null,
@@ -32,6 +40,6 @@ export function fakeMessage(init: FakeMessageInit = {}): Message {
     interactionMetadata: init.interactionUser
       ? { user: { globalName: null, ...init.interactionUser } }
       : null,
-    attachments: new Map(),
+    attachments,
   } as unknown as Message;
 }

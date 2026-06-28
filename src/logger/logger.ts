@@ -2,17 +2,29 @@
 // format of the official Wordle Activity can be inspected before a parser is
 // written. Output is one JSON object per line in data/dump-<timestamp>.jsonl,
 // plus a short human-readable summary on the console.
+//
+// With SAVE_IMAGES set, every image the official Activity posts is downloaded
+// and sorted into data/images/<category>/, named with the puzzle number it
+// belongs to. The categories mirror the message kinds the parsers care about:
+// the per-game solo grid, the combined multi-player grid, and the daily summary
+// board ("here are yesterday's results"). Sorting them this way is what makes a
+// captured day summary easy to copy into test/fixtures/images and write tests
+// against, alongside the solo grids that already back the parser tests.
 
 import 'dotenv/config';
 import { Client, GatewayIntentBits, type Message, type TextBasedChannel } from 'discord.js';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MESSAGE_PAGE_SIZE } from '../constants.js';
+import { MESSAGE_PAGE_SIZE, OFFICIAL_WORDLE_APP_ID } from '../constants.js';
+import { numberForTimestamp } from '../domain/wordle.js';
 
 const token = process.env.DISCORD_TOKEN;
 const channelFilter = process.env.WORDLE_CHANNEL_ID?.trim() || null;
 const authorFilter = process.env.WORDLE_APP_ID?.trim() || null;
 const backfillLimit = Number.parseInt(process.env.BACKFILL_LIMIT ?? '0', 10) || 0;
+// Puzzle-number attribution rolls over at local midnight, so the daily summary's
+// "yesterday" is resolved in this zone. Matches the bot's TIMEZONE.
+const timeZone = process.env.TIMEZONE?.trim() || 'UTC';
 // When set, image attachments and embed images are downloaded next to the dump
 // so the grid parser can be tested and re-tuned offline (CDN URLs expire).
 const saveImages = /^(1|true|yes)$/i.test(process.env.SAVE_IMAGES ?? '');
@@ -30,7 +42,7 @@ console.log(`Writing raw dumps to ${outFile}`);
 const imagesDir = join(dataDir, 'images');
 if (saveImages) {
   mkdirSync(imagesDir, { recursive: true });
-  console.log(`Saving images to ${imagesDir}`);
+  console.log(`Saving images to ${imagesDir} (sorted into <category>/ subfolders)`);
 }
 
 interface DumpImageRef {
@@ -146,6 +158,42 @@ function serialize(message: Message, event: string): DumpRecord {
   };
 }
 
+// Matches the guards the daily-summary and activity-image parsers use, so the
+// logger sorts images into the same buckets those parsers reason about.
+const SUMMARY_RE = /here are yesterday'?s results/i;
+const MULTI_PLAYER_RE = /\band\b|\bothers\b/i;
+const PLAYING_RE = /\bplaying\b/i;
+
+type ImageCategory = 'summary' | 'solo' | 'multi' | 'bot' | 'other';
+
+function isOfficialActivity(record: DumpRecord): boolean {
+  return record.author?.id === OFFICIAL_WORDLE_APP_ID || record.applicationId === OFFICIAL_WORDLE_APP_ID;
+}
+
+function puzzleNumber(record: DumpRecord, dayOffset: number): number | null {
+  if (!record.createdAt) return null;
+  try {
+    return numberForTimestamp(new Date(record.createdAt), timeZone, dayOffset);
+  } catch {
+    return null;
+  }
+}
+
+// Buckets a message by the kind of image it carries and the puzzle that image
+// belongs to. The daily summary reports the previous day; solo and multi-player
+// grids are the current day. Anything from another author, or from the bot in a
+// shape the parsers do not read, falls back to a catch-all bucket.
+function classify(record: DumpRecord): { category: ImageCategory; puzzle: number | null } {
+  if (!isOfficialActivity(record)) return { category: 'other', puzzle: null };
+  if (SUMMARY_RE.test(record.content)) return { category: 'summary', puzzle: puzzleNumber(record, -1) };
+  const interaction = record.interactionMetadata as { user?: unknown } | null;
+  if (interaction?.user || PLAYING_RE.test(record.content)) {
+    const category = MULTI_PLAYER_RE.test(record.content) ? 'multi' : 'solo';
+    return { category, puzzle: puzzleNumber(record, 0) };
+  }
+  return { category: 'bot', puzzle: puzzleNumber(record, 0) };
+}
+
 function describe(record: DumpRecord): string {
   const who = record.author
     ? `${record.author.username}${record.author.bot ? ' [bot]' : ''} (${record.author.id})`
@@ -164,6 +212,7 @@ function describe(record: DumpRecord): string {
       ? 'has-text'
       : 'no-text';
   const flags = [
+    `cat:${classify(record).category}`,
     `embeds:${record.embeds.length}`,
     `attachments:${record.attachments.length}`,
     textHint,
@@ -191,34 +240,45 @@ function extFor(contentType: string | null | undefined, url: string): string {
   return 'bin';
 }
 
-// Downloads url into data/images/<base>.<ext>. Returns the path relative to the
-// dump file (e.g. "images/123-att-456.png") or null on failure.
-async function download(url: string, base: string, contentType?: string | null): Promise<string | null> {
+// Downloads url into data/images/<category>/<base>.<ext>. Returns the path
+// relative to the dump file (e.g. "images/solo/1834-123-att-456.png") or null on
+// failure.
+async function download(
+  url: string,
+  category: ImageCategory,
+  base: string,
+  contentType?: string | null,
+): Promise<string | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
+    const dir = join(imagesDir, category);
+    mkdirSync(dir, { recursive: true });
     const name = `${base}.${extFor(contentType ?? res.headers.get('content-type'), url)}`;
-    writeFileSync(join(imagesDir, name), buf);
-    return join('images', name);
+    writeFileSync(join(dir, name), buf);
+    return join('images', category, name);
   } catch {
     return null;
   }
 }
 
 // Mutates the serialized record in place, adding a localPath to every image
-// attachment and to each embed image/thumbnail it manages to download.
+// attachment and to each embed image/thumbnail it manages to download. Files are
+// sorted by category and prefixed with the puzzle number they belong to.
 async function saveImageFiles(data: DumpRecord): Promise<void> {
+  const { category, puzzle } = classify(data);
+  const prefix = puzzle != null ? `${puzzle}-` : '';
   for (const a of data.attachments) {
     if (!a.contentType?.startsWith('image/')) continue;
-    a.localPath = await download(a.url, `${data.id}-att-${a.id}`, a.contentType);
+    a.localPath = await download(a.url, category, `${prefix}${data.id}-att-${a.id}`, a.contentType);
   }
   for (let i = 0; i < data.embeds.length; i += 1) {
     const e = data.embeds[i];
     const image = e.image;
-    if (image?.url) image.localPath = await download(image.url, `${data.id}-emb${i}-image`);
+    if (image?.url) image.localPath = await download(image.url, category, `${prefix}${data.id}-emb${i}-image`);
     const thumb = e.thumbnail;
-    if (thumb?.url) thumb.localPath = await download(thumb.url, `${data.id}-emb${i}-thumb`);
+    if (thumb?.url) thumb.localPath = await download(thumb.url, category, `${prefix}${data.id}-emb${i}-thumb`);
   }
 }
 

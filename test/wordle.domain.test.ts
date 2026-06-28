@@ -6,6 +6,7 @@ import {
   shiftISO,
   numberForTimestamp,
   periodRange,
+  lastWeekRange,
   currentNumber,
   rejectFuturePuzzles,
 } from '../src/domain/wordle.js';
@@ -71,6 +72,19 @@ test('a week period is Monday through Sunday', () => {
   assert.equal(new Date(`${from}T00:00:00Z`).getUTCDay(), 1); // Monday
   const days = (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000;
   assert.equal(days, 6);
+});
+
+test('lastWeekRange is the Monday-Sunday before the current week', () => {
+  // 2026-06-29 is a Monday; the week that just ended is Jun 22 (Mon) - Jun 28 (Sun).
+  assert.deepEqual(lastWeekRange('UTC', new Date('2026-06-29T00:05:00Z')), [
+    '2026-06-22',
+    '2026-06-28',
+  ]);
+  // Mid-week still points at the previous calendar week.
+  assert.deepEqual(lastWeekRange('UTC', new Date('2026-07-01T12:00:00Z')), [
+    '2026-06-22',
+    '2026-06-28',
+  ]);
 });
 
 test('a month period spans the first to the last day of one month', () => {

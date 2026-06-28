@@ -1,10 +1,11 @@
-import { EmbedBuilder, SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
+import { AttachmentBuilder, SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
 import type { BotCommand } from './command.js';
 import { getUserResults } from '../db/results.repository.js';
 import { periodRange } from '../domain/wordle.js';
-import { summarize, histogram, pct, fixed } from '../stats/stats.js';
+import { summarize, pct, fixed } from '../stats/stats.js';
+import { renderStatsPng, type StatTile, type StatBar } from '../render/stats-image.js';
+import { greenFor, FAILED } from '../render/theme.js';
 import { config } from '../config/index.js';
-import { EMBED_COLOR } from '../constants.js';
 import { periodOption, PERIOD_LABEL, periodFrom } from './shared.js';
 
 /** `/stats`: detailed per-player figures (win rate, averages, streaks, distribution) for a period. */
@@ -25,19 +26,32 @@ export const statsCommand: BotCommand = {
       return;
     }
     const s = summarize(rows);
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLOR)
-      .setTitle(`${user.username} - ${PERIOD_LABEL[period]}`)
-      .addFields(
-        { name: 'Games', value: String(s.games), inline: true },
-        { name: 'Win rate', value: `${pct(s.winRate)} (${s.wins}/${s.games})`, inline: true },
-        { name: 'Avg score', value: fixed(s.avgScore), inline: true },
-        { name: 'Best', value: s.best ? `${s.best}/6` : '-', inline: true },
-        { name: 'Fails', value: String(s.fails), inline: true },
-        { name: 'Current streak', value: String(s.current), inline: true },
-        { name: 'Longest streak', value: String(s.longest), inline: true },
-        { name: 'Guess distribution', value: '```\n' + histogram(s.distribution) + '\n```' },
-      );
-    await interaction.reply({ embeds: [embed] });
+
+    const tiles: StatTile[] = [
+      { label: 'Games', value: String(s.games) },
+      { label: 'Win rate', value: `${pct(s.winRate)} (${s.wins})` },
+      { label: 'Avg score', value: fixed(s.avgScore) },
+      { label: 'Best', value: s.best ? `${s.best}/6` : '-' },
+      { label: 'Current streak', value: String(s.current) },
+      { label: 'Longest streak', value: String(s.longest) },
+      { label: 'Hard mode', value: `${pct(s.hardMode / s.games)} (${s.hardMode})` },
+    ];
+
+    const bars: StatBar[] = s.distribution.map((count, i) => ({
+      label: String(i + 1),
+      count,
+      share: s.games ? count / s.games : 0,
+      color: greenFor(i + 1),
+    }));
+    bars.push({
+      label: 'X',
+      count: s.fails,
+      share: s.games ? s.fails / s.games : 0,
+      color: FAILED,
+    });
+
+    const png = renderStatsPng({ name: user.username, period: PERIOD_LABEL[period], tiles, bars });
+    const file = new AttachmentBuilder(png, { name: 'stats.png' });
+    await interaction.reply({ files: [file] });
   },
 };
