@@ -1,71 +1,71 @@
-// Shapes a player's results into a GitHub-style contribution calendar: 53 week
-// columns of 7 days each, Sunday at the top, ending on the current local day.
+// Shapes a player's results into a single-month day grid for the /history view.
 
 import type { UserResultRow } from '../db/results.repository.js';
-import { localDateISO, shiftISO, isoToNumber } from '../domain/wordle.js';
+import { localDateISO, isoToNumber } from '../domain/wordle.js';
 
 /** How a single day is drawn. */
 export type DayState =
   | 'future' // after today; left blank
-  | 'none' // in window, no game recorded
+  | 'none' // in the month, no game recorded
   | 'fail' // played, did not solve
   | 'win'; // solved (shaded by guess count)
 
-export interface DayCell {
-  iso: string;
+/** One day of a single-month view. */
+export interface MonthCell {
+  day: number; // 1..31
   state: DayState;
-  /** Guess count for played days (1-6); 0 otherwise. */
   guesses: number;
 }
 
-export interface CalendarData {
-  /** Week columns, each 7 days with index 0 = Sunday. */
-  weeks: DayCell[][];
-  firstIso: string;
-  lastIso: string;
-  /** Days with a recorded game in the window. */
+export interface MonthData {
+  /** "YYYY-MM" of the month shown. */
+  month: string;
+  /** Day cells in calendar order, index 0 = the 1st. */
+  cells: MonthCell[];
+  /** Monday-based column of the 1st (0 = Monday ... 6 = Sunday). */
+  leading: number;
   played: number;
-  /** Days solved in the window. */
   solved: number;
 }
 
-/** Number of week columns, matching GitHub's roughly one-year view. */
-const WEEKS = 53;
-
-export function buildCalendar(rows: UserResultRow[], timeZone: string): CalendarData {
+/** Shapes one month ("YYYY-MM") of a player's results into a day grid. */
+export function buildMonth(
+  rows: UserResultRow[],
+  month: string,
+  timeZone: string,
+  now: Date = new Date(),
+): MonthData {
   const byNumber = new Map<number, UserResultRow>();
   for (const r of rows) byNumber.set(r.number, r);
 
-  const todayIso = localDateISO(new Date(), timeZone);
-  const dow = new Date(`${todayIso}T00:00:00Z`).getUTCDay(); // 0 = Sunday
-  const firstSunday = shiftISO(todayIso, -dow - (WEEKS - 1) * 7);
+  const todayIso = localDateISO(now, timeZone);
+  const [year, mon] = month.split('-').map(Number);
+  const days = new Date(Date.UTC(year, mon, 0)).getUTCDate();
+  const firstDow = new Date(`${month}-01T00:00:00Z`).getUTCDay(); // 0 = Sunday
+  const leading = (firstDow + 6) % 7; // shift so Monday is column 0
 
-  const weeks: DayCell[][] = [];
+  const cells: MonthCell[] = [];
   let played = 0;
   let solved = 0;
-  for (let col = 0; col < WEEKS; col += 1) {
-    const week: DayCell[] = [];
-    for (let row = 0; row < 7; row += 1) {
-      const iso = shiftISO(firstSunday, col * 7 + row);
-      if (iso > todayIso) {
-        week.push({ iso, state: 'future', guesses: 0 });
-        continue;
-      }
-      const res = byNumber.get(isoToNumber(iso));
-      if (!res) {
-        week.push({ iso, state: 'none', guesses: 0 });
-        continue;
-      }
-      played += 1;
-      if (res.solved) {
-        solved += 1;
-        week.push({ iso, state: 'win', guesses: res.guesses });
-      } else {
-        week.push({ iso, state: 'fail', guesses: res.guesses });
-      }
+  for (let day = 1; day <= days; day += 1) {
+    const iso = `${month}-${String(day).padStart(2, '0')}`;
+    if (iso > todayIso) {
+      cells.push({ day, state: 'future', guesses: 0 });
+      continue;
     }
-    weeks.push(week);
+    const res = byNumber.get(isoToNumber(iso));
+    if (!res) {
+      cells.push({ day, state: 'none', guesses: 0 });
+      continue;
+    }
+    played += 1;
+    if (res.solved) {
+      solved += 1;
+      cells.push({ day, state: 'win', guesses: res.guesses });
+    } else {
+      cells.push({ day, state: 'fail', guesses: res.guesses });
+    }
   }
 
-  return { weeks, firstIso: firstSunday, lastIso: todayIso, played, solved };
+  return { month, cells, leading, played, solved };
 }

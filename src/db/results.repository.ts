@@ -29,6 +29,11 @@ export interface LeaderboardRow {
   solved: boolean;
 }
 
+/** Leaderboard row plus the puzzle it belongs to, for the day-by-day weekly view. */
+export interface DailyResultRow extends LeaderboardRow {
+  number: number;
+}
+
 /** Row shape returned for a single player's history. */
 export interface UserResultRow {
   number: number;
@@ -110,6 +115,17 @@ export async function getResults(guildId: string, from: string, to: string): Pro
     `SELECT user_id AS "userId", username, guesses, solved
        FROM results
       WHERE guild_id = $1 AND puzzle_date BETWEEN $2 AND $3`,
+    [guildId, from, to],
+  );
+  return rows;
+}
+
+export async function getResultsByDay(guildId: string, from: string, to: string): Promise<DailyResultRow[]> {
+  const { rows } = await pool.query<DailyResultRow>(
+    `SELECT user_id AS "userId", username, puzzle_number AS number, guesses, solved
+       FROM results
+      WHERE guild_id = $1 AND puzzle_date BETWEEN $2 AND $3
+      ORDER BY puzzle_number ASC`,
     [guildId, from, to],
   );
   return rows;

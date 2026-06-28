@@ -39,6 +39,28 @@ export function numberForTimestamp(date: Date, timeZone: string, dayOffset = 0):
   return isoToNumber(shiftISO(localDateISO(date, timeZone), dayOffset));
 }
 
+/** Puzzle number for the current day in the group's timezone. Anything greater is in the future. */
+export function currentNumber(timeZone = 'UTC', now: Date = new Date()): number {
+  return numberForTimestamp(now, timeZone);
+}
+
+/**
+ * Splits games into those playable now and those dated after the current day in
+ * the given timezone. A future puzzle cannot have been played yet, so accepting
+ * one would inflate streaks and stats.
+ */
+export function rejectFuturePuzzles<T extends { number: number }>(
+  games: readonly T[],
+  timeZone: string,
+  now: Date = new Date(),
+): { kept: T[]; dropped: T[] } {
+  const today = currentNumber(timeZone, now);
+  const kept: T[] = [];
+  const dropped: T[] = [];
+  for (const game of games) (game.number > today ? dropped : kept).push(game);
+  return { kept, dropped };
+}
+
 /** Inclusive [from, to] ISO date bounds for a leaderboard period, in timezone. */
 export function periodRange(period: Period, timeZone = 'UTC'): [string, string] {
   const todayIso = localDateISO(new Date(), timeZone);

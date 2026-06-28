@@ -10,10 +10,6 @@ export interface Config {
     aliases: Map<string, string>;
     /** Parse the per-game "X was playing" grid image for same-day results. */
     enableActivityImage: boolean;
-    /** Reaction added once a result is captured. */
-    confirmReaction: string;
-    /** Reaction marking that a newer message corrected a stored result. */
-    overrideReaction: string;
     backfillOnStart: boolean;
     backfillLimit: number;
 }
@@ -91,8 +87,6 @@ function loadConfig(): Config {
         timeZone: timeZone("TIMEZONE"),
         aliases: aliases("PLAYER_ALIASES"),
         enableActivityImage: bool("ENABLE_ACTIVITY_IMAGE"),
-        confirmReaction: str("CONFIRM_REACTION"),
-        overrideReaction: str("OVERRIDE_REACTION"),
         backfillOnStart: bool("BACKFILL_ON_START"),
         backfillLimit: positiveInt("BACKFILL_LIMIT"),
     };

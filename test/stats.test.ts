@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summarize, aggregateLeaderboard, headToHead } from '../src/stats/stats.js';
-import type { LeaderboardRow, UserResultRow } from '../src/db/results.repository.js';
+import { summarize, aggregateLeaderboard, buildWeeklyGrid, headToHead } from '../src/stats/stats.js';
+import type { DailyResultRow, LeaderboardRow, UserResultRow } from '../src/db/results.repository.js';
 
 function userRow(number: number, guesses: number, solved: boolean): UserResultRow {
   return { number, date: numberToDate(number), guesses, solved, grid: null, hardMode: false };
@@ -21,7 +21,6 @@ test('summarize counts wins, averages, distribution and streaks', () => {
   assert.equal(s.wins, 4);
   assert.equal(s.fails, 1);
   assert.equal(s.winRate, 0.8);
-  assert.equal(s.avgGuesses, 3.5); // (3+4+2+5)/4
   assert.equal(s.avgScore, 4.2); // (3+4+7+2+5)/5, fail counts as 7
   assert.equal(s.best, 2);
   assert.deepEqual(s.distribution, [0, 1, 1, 1, 1, 0]);
@@ -32,7 +31,6 @@ test('summarize counts wins, averages, distribution and streaks', () => {
 test('summarize handles an all-empty history', () => {
   const s = summarize([]);
   assert.equal(s.games, 0);
-  assert.equal(s.avgGuesses, null);
   assert.equal(s.avgScore, null);
   assert.equal(s.best, null);
   assert.equal(s.current, 0);
@@ -54,6 +52,26 @@ test('aggregateLeaderboard ranks by average score then games', () => {
   assert.equal(board[0].best, 2);
   assert.equal(board[1].avgScore, 5); // (3+7)/2, fail counts as 7
   assert.equal(board[1].avgGuesses, 3); // only the solved game
+});
+
+test('buildWeeklyGrid gives one row per player, ranked by average score', () => {
+  const rows: DailyResultRow[] = [
+    { userId: 'a', username: 'Alice', number: 10, guesses: 3, solved: true },
+    { userId: 'a', username: 'Alice', number: 12, guesses: 2, solved: true },
+    { userId: 'b', username: 'Bob', number: 10, guesses: 4, solved: true },
+    { userId: 'b', username: 'Bob', number: 11, guesses: 6, solved: false },
+  ];
+  const grid = buildWeeklyGrid(rows, [10, 11, 12, 13]); // columns fixed by caller, incl. unplayed day 13
+  assert.deepEqual(grid.numbers, [10, 11, 12, 13]);
+  assert.deepEqual(
+    grid.players.map((p) => p.userId),
+    ['a', 'b'], // Alice avg 2.5 beats Bob avg 5.5
+  );
+  assert.equal(grid.players[0].played, 2);
+  assert.equal(grid.players[0].avgScore, 2.5);
+  assert.equal(grid.players[0].byNumber.get(10)?.guesses, 3);
+  assert.equal(grid.players[0].byNumber.has(11), false); // Alice skipped puzzle 11
+  assert.equal(grid.players[1].byNumber.get(11)?.solved, false); // Bob failed it
 });
 
 test('headToHead compares only shared puzzles', () => {

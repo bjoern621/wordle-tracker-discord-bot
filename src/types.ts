@@ -59,6 +59,4 @@ export interface WordleParser {
 export interface IngestOutcome {
   source: ResultSource;
   count: number;
-  /** True when a stored result's score changed (used to pick the reaction). */
-  changed: boolean;
 }

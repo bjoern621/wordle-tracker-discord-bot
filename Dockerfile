@@ -19,6 +19,8 @@ ENV NODE_ENV=production
 COPY package.json ./
 RUN npm install --omit=dev
 COPY --from=build /app/dist ./dist
+# Bundled font for the calendar month-view renderer, loaded at runtime.
+COPY assets/fonts ./assets/fonts
 
 # docker-compose overrides this per service (bot vs logger).
 CMD ["node", "dist/index.js"]

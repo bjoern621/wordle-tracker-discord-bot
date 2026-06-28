@@ -2,7 +2,7 @@ import type { Message } from 'discord.js';
 import type { IngestOutcome, KnownUser, ParseContext, ParsedGame, PlayerRef, ResultSource } from '../types.js';
 import { parsers } from '../parsers/index.js';
 import { recordResult } from '../db/results.repository.js';
-import { numberToIso } from '../domain/wordle.js';
+import { numberToIso, rejectFuturePuzzles } from '../domain/wordle.js';
 import { learnUser, resolve, syntheticId } from '../identity/identity.js';
 import { trackedChannel } from '../settings/guild-channels.js';
 import { config } from '../config/index.js';
@@ -34,10 +34,9 @@ async function storeGames(
   ts: Date,
 ): Promise<IngestOutcome> {
   const unresolved: string[] = [];
-  let changed = false;
   for (const game of games) {
     const who = resolvePlayer(guildId, game.player, unresolved);
-    const status = await recordResult({
+    await recordResult({
       guildId,
       userId: who.id,
       puzzleNumber: game.number,
@@ -51,12 +50,11 @@ async function storeGames(
       username: who.name,
       messageId: message.id,
     });
-    if (status === 'updated') changed = true;
   }
   if (unresolved.length) {
     console.warn(`#${games[0]?.number}: unresolved ${unresolved.join(', ')} (set PLAYER_ALIASES)`);
   }
-  return { source, count: games.length, changed };
+  return { source, count: games.length };
 }
 
 /**
@@ -78,9 +76,17 @@ export async function ingestMessage(message: Message): Promise<IngestOutcome | n
 
   for (const parser of parsers) {
     const games = await parser.parse(message, ctx);
-    if (games && games.length) {
-      return storeGames(parser.source, games, message, guildId, ts);
+    if (!games || !games.length) continue;
+    // A puzzle dated after today cannot have been played yet; drop it so a typo or
+    // a future-dated share text never inflates streaks or stats.
+    const { kept, dropped } = rejectFuturePuzzles(games, config.timeZone);
+    for (const game of dropped) {
+      console.warn(`Ignoring future puzzle #${game.number} from ${parser.source}.`);
     }
+    // The message matched this parser; if every game was a future puzzle there is
+    // nothing to store, and no other parser will match the same content.
+    if (!kept.length) return null;
+    return storeGames(parser.source, kept, message, guildId, ts);
   }
   return null;
 }

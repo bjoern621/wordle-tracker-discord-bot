@@ -1,7 +1,7 @@
 // Aggregations computed in JS from result rows. Kept out of SQL so the query
 // layer stays database-agnostic.
 
-import type { LeaderboardRow, UserResultRow } from '../db/results.repository.js';
+import type { DailyResultRow, LeaderboardRow, UserResultRow } from '../db/results.repository.js';
 import { FAIL_SCORE } from '../constants.js';
 
 export interface PlayerSummary {
@@ -123,6 +123,49 @@ export function aggregateLeaderboard(rows: LeaderboardRow[]): LeaderboardEntry[]
       best: u.best,
     }))
     .sort((a, b) => (a.avgScore ?? 0) - (b.avgScore ?? 0) || b.games - a.games);
+}
+
+export interface WeeklyCell {
+  guesses: number;
+  solved: boolean;
+}
+
+export interface WeeklyPlayerRow {
+  userId: string;
+  username: string | null;
+  avgScore: number;
+  played: number;
+  byNumber: Map<number, WeeklyCell>;
+}
+
+export interface WeeklyGrid {
+  /** The week's puzzle numbers in column order; every day is present. */
+  numbers: number[];
+  /** One row per player, ordered best average score first. */
+  players: WeeklyPlayerRow[];
+}
+
+/**
+ * Collapses a week of results into one row per player, keyed by puzzle number.
+ * `numbers` fixes the columns (the full week), so a day nobody played is still a
+ * column with empty cells. Players are ranked by average score (failed games
+ * count as FAIL_SCORE), the same order as the leaderboard.
+ */
+export function buildWeeklyGrid(rows: DailyResultRow[], numbers: number[]): WeeklyGrid {
+  const byUser = new Map<string, Map<number, WeeklyCell>>();
+  for (const r of rows) {
+    let cells = byUser.get(r.userId);
+    if (!cells) byUser.set(r.userId, (cells = new Map()));
+    cells.set(r.number, { guesses: r.guesses, solved: r.solved });
+  }
+  const players = aggregateLeaderboard(rows).map((e) => ({
+    userId: e.userId,
+    username: e.username,
+    avgScore: e.avgScore ?? FAIL_SCORE,
+    played: e.games,
+    byNumber: byUser.get(e.userId)!,
+  }));
+  return { numbers, players };
 }
 
 export function headToHead(rows1: UserResultRow[], rows2: UserResultRow[]): HeadToHead {

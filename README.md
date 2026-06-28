@@ -47,8 +47,7 @@ distributions, leaderboards) are computed from these rows, not stored.
 Results never double-count: on conflict the **most recent message wins** (by
 message timestamp, so backfill order cannot corrupt data). An override preserves
 the grid and hard-mode flag when the newer message lacks them, so colour detail
-is never lost. When a newer message changes a stored result, the bot marks it
-with `OVERRIDE_REACTION` instead of the normal capture reaction.
+is never lost.
 
 History is recovered by scanning past messages (`/backfill` or
 `BACKFILL_ON_START`); the daily summaries make this a complete day-by-day record
@@ -66,7 +65,7 @@ for games seen via share text or the per-game image.
    the plain `@nickname` players in daily summaries.)
 4. **OAuth2 -> URL Generator** -> scopes **bot** + **applications.commands** ->
    permissions: View Channels, Read Message History, Send Messages, Embed Links,
-   Attach Files, Add Reactions. Open the URL and add the bot to the server.
+   Attach Files. Open the URL and add the bot to the server.
 
 ### 2. Configure
 
@@ -165,8 +164,6 @@ malformed; there are no defaults or fallbacks.
 | `TIMEZONE` | `Europe/Berlin` | Group timezone for resolving the daily summary's "yesterday". |
 | `PLAYER_ALIASES` | `Tim=792…,Björn=386…` | `Name=id,…` overrides for unresolved plain-text players. May be empty. |
 | `ENABLE_ACTIVITY_IMAGE` | `true` | Parse the per-game grid image for same-day results. |
-| `CONFIRM_REACTION` | `✅` | Reaction added when a result is captured. |
-| `OVERRIDE_REACTION` | `🔁` | Reaction when a newer message corrects a stored result. |
 | `BACKFILL_ON_START` | `false` | Scan history once on startup. |
 | `BACKFILL_LIMIT` | `5000` | Messages scanned per backfill. |
 

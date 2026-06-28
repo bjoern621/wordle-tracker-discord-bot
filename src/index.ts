@@ -1,9 +1,10 @@
-import { Events, MessageFlags, type Client, type Guild, type Message } from 'discord.js';
+import { Events, MessageFlags, type Client, type Guild } from 'discord.js';
 import { config } from './config/index.js';
 import { createClient } from './discord/client.js';
 import { ingestMessage } from './ingest/ingest.js';
 import { backfillChannel } from './ingest/backfill.js';
 import { commands } from './commands/index.js';
+import { HISTORY_MONTH_SELECT, handleHistorySelect } from './commands/history.command.js';
 import { syncGuild } from './identity/identity.js';
 import { loadGuildChannels, trackedChannels } from './settings/guild-channels.js';
 import { MEMBER_SYNC_INTERVAL_MS, OFFICIAL_WORDLE_APP_ID } from './constants.js';
@@ -77,19 +78,9 @@ client.on(Events.GuildCreate, async (guild) => {
   void syncGuild(guild);
 });
 
-async function react(message: Message, emoji: string): Promise<void> {
-  if (!emoji) return;
-  try {
-    await message.react(emoji);
-  } catch {
-    // Best-effort (missing permission, deleted message, etc.).
-  }
-}
-
 client.on(Events.MessageCreate, async (message) => {
   try {
-    const result = await ingestMessage(message);
-    if (result) await react(message, result.changed ? config.overrideReaction : config.confirmReaction);
+    await ingestMessage(message);
   } catch (err) {
     console.error('Ingest (create) failed:', errMessage(err));
   }
@@ -107,6 +98,23 @@ client.on(Events.MessageUpdate, async (_oldMessage, newMessage) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isStringSelectMenu()) {
+    if (!interaction.guildId) return; // server-only
+    try {
+      if (interaction.customId.startsWith(`${HISTORY_MONTH_SELECT}:`)) {
+        await handleHistorySelect(interaction);
+      }
+    } catch (err) {
+      console.error('Component interaction failed:', err);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction
+          .reply({ content: 'Something went wrong.', flags: MessageFlags.Ephemeral })
+          .catch(() => {});
+      }
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
   if (!interaction.guildId) return; // commands are server-only
   const command = commandMap.get(interaction.commandName);
