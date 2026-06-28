@@ -14,12 +14,12 @@ CREATE TABLE results (
     guesses       integer     NOT NULL,
     solved        boolean     NOT NULL,
     grid          text,
-    hard_mode     boolean     NOT NULL DEFAULT false,
+    hard_mode     boolean     NOT NULL,
     source        text        NOT NULL,
     message_ts    timestamptz NOT NULL,
     username      text        NOT NULL,
     message_id    text        NOT NULL,
-    updated_at    timestamptz NOT NULL DEFAULT now(),
+    updated_at    timestamptz NOT NULL,
     PRIMARY KEY (guild_id, user_id, puzzle_number)
 );
 

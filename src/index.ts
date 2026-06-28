@@ -1,4 +1,4 @@
-import { Events, MessageFlags, type Guild, type Message } from 'discord.js';
+import { Events, MessageFlags, type Message } from 'discord.js';
 import { config } from './config/index.js';
 import { createClient } from './discord/client.js';
 import { ingestMessage } from './ingest/ingest.js';
@@ -17,31 +17,29 @@ function errMessage(err: unknown): string {
 client.once(Events.ClientReady, async (ready) => {
   console.log(`Logged in as ${ready.user.tag}`);
 
-  const data = commands.map((c) => c.data.toJSON());
-  const targetGuilds = (): Guild[] => {
-    if (!config.guildId) return [...ready.guilds.cache.values()];
-    const guild = ready.guilds.cache.get(config.guildId);
-    if (!guild) console.warn(`GUILD_ID ${config.guildId} not found among joined servers.`);
-    return guild ? [guild] : [];
-  };
-
-  for (const guild of targetGuilds()) {
-    await syncGuild(guild);
-    await guild.commands.set(data);
-    console.log(`Registered ${data.length} slash commands in ${guild.name}`);
+  const guild = ready.guilds.cache.get(config.guildId);
+  if (!guild) {
+    console.error(`GUILD_ID ${config.guildId} is not a server the bot has joined. Invite it there first.`);
+    process.exit(1);
   }
-  setInterval(() => {
-    for (const guild of targetGuilds()) void syncGuild(guild);
-  }, MEMBER_SYNC_INTERVAL_MS);
 
-  if (config.backfillOnStart && config.channelId) {
+  const channel = await ready.channels.fetch(config.channelId).catch(() => null);
+  if (!channel?.isTextBased() || !('guildId' in channel) || channel.guildId !== config.guildId) {
+    console.error(`WORDLE_CHANNEL_ID ${config.channelId} is not a readable text channel in GUILD_ID ${config.guildId}.`);
+    process.exit(1);
+  }
+
+  const data = commands.map((c) => c.data.toJSON());
+  await syncGuild(guild);
+  await guild.commands.set(data);
+  console.log(`Registered ${data.length} slash commands in ${guild.name}`);
+  setInterval(() => void syncGuild(guild), MEMBER_SYNC_INTERVAL_MS);
+
+  if (config.backfillOnStart) {
     try {
-      const channel = await ready.channels.fetch(config.channelId);
-      if (channel?.isTextBased()) {
-        console.log('Backfilling channel history...');
-        const { processed, stored } = await backfillChannel(channel, config.backfillLimit);
-        console.log(`Backfill done: scanned ${processed}, stored ${stored}.`);
-      }
+      console.log('Backfilling channel history...');
+      const { processed, stored } = await backfillChannel(channel, config.backfillLimit);
+      console.log(`Backfill done: scanned ${processed}, stored ${stored}.`);
     } catch (err) {
       console.error('Backfill on start failed:', errMessage(err));
     }
@@ -79,7 +77,7 @@ client.on(Events.MessageUpdate, async (_oldMessage, newMessage) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
-  if (config.guildId && interaction.guildId !== config.guildId) return;
+  if (interaction.guildId !== config.guildId) return;
   const command = commandMap.get(interaction.commandName);
   if (!command) return;
   try {

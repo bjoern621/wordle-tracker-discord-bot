@@ -64,9 +64,8 @@ async function storeGames(
  * the most recent message wins on conflict.
  */
 export async function ingestMessage(message: Message): Promise<IngestOutcome | null> {
-  if (config.guildId && message.guildId !== config.guildId) return null;
-  if (config.channelId && message.channelId !== config.channelId) return null;
-  if (!message.guildId) return null;
+  if (message.guildId !== config.guildId) return null;
+  if (message.channelId !== config.channelId) return null;
 
   learnFrom(message);
 
@@ -76,7 +75,7 @@ export async function ingestMessage(message: Message): Promise<IngestOutcome | n
   for (const parser of parsers) {
     const games = await parser.parse(message, ctx);
     if (games && games.length) {
-      return storeGames(parser.source, games, message, message.guildId, ts);
+      return storeGames(parser.source, games, message, config.guildId, ts);
     }
   }
   return null;

@@ -66,10 +66,12 @@ for games seen via share text or the per-game image.
 ```sh
 task setup
 ```
-Set `DISCORD_TOKEN`, and `WORDLE_CHANNEL_ID` to the Wordle channel (enable
-Developer Mode, right-click the channel -> Copy Channel ID). To import existing
-history on first run, set `BACKFILL_ON_START=true`. Optionally set
-`POSTGRES_PASSWORD`.
+Fill in every variable in `.env` (see the configuration reference below). The
+bot validates them all at startup and exits with the list of problems if any is
+missing or malformed, so there is nothing optional to skip. `WORDLE_CHANNEL_ID`
+must be a channel inside `GUILD_ID` (enable Developer Mode, right-click the
+channel -> Copy Channel ID). To import existing history on first run, set
+`BACKFILL_ON_START=true`.
 
 ### 3. Run
 
@@ -144,17 +146,24 @@ task logger
 
 ## Configuration reference
 
-| Variable | Default | Purpose |
+All variables must be set, except `PLAYER_ALIASES`, which may be left empty. The
+bot validates them at startup and exits listing any that are missing or
+malformed; there are no defaults or fallbacks.
+
+| Variable | Example | Purpose |
 | --- | --- | --- |
-| `DISCORD_TOKEN` | (required) | Bot token. |
-| `WORDLE_CHANNEL_ID` | (any channel) | Restrict tracking to one channel. |
+| `DISCORD_TOKEN` | (secret) | Bot token from the Developer Portal. |
+| `DATABASE_URL` | `postgresql://wordle:wordle@localhost:5432/wordle` | Postgres connection string. Compose points it at the `db` service. |
+| `GUILD_ID` | `123…` | The single server the bot operates in. |
+| `WORDLE_CHANNEL_ID` | `123…` | The single channel to track; must belong to `GUILD_ID`. |
 | `TIMEZONE` | `Europe/Berlin` | Group timezone for resolving the daily summary's "yesterday". |
-| `PLAYER_ALIASES` | (empty) | `Name=id,...` overrides for unresolved plain-text players. |
+| `PLAYER_ALIASES` | `Tim=792…,Björn=386…` | `Name=id,…` overrides for unresolved plain-text players. May be empty. |
 | `ENABLE_ACTIVITY_IMAGE` | `true` | Parse the per-game grid image for same-day results. |
-| `DATABASE_URL` | (set by compose) | Postgres connection string. Compose points it at the `db` service. |
-| `POSTGRES_PASSWORD` | `wordle` | Password for the bundled Postgres container. |
-| `POSTGRES_PORT` | `5432` | Host port Postgres is exposed on. |
-| `CONFIRM_REACTION` | `✅` | Reaction added when a result is captured. Empty to disable. |
+| `CONFIRM_REACTION` | `✅` | Reaction added when a result is captured. |
 | `OVERRIDE_REACTION` | `🔁` | Reaction when a newer message corrects a stored result. |
 | `BACKFILL_ON_START` | `false` | Scan history once on startup. |
 | `BACKFILL_LIMIT` | `5000` | Messages scanned per backfill. |
+
+The Postgres container and the logger task read their own variables, separate
+from the bot's config: `POSTGRES_PASSWORD`, `POSTGRES_PORT` (compose), and
+`SAVE_IMAGES` (logger task).

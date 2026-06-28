@@ -19,12 +19,12 @@ export const backfillCommand: BotCommand = {
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const limit = interaction.options.getInteger('limit') || config.backfillLimit;
-    const channel = config.channelId
-      ? await interaction.client.channels.fetch(config.channelId)
-      : interaction.channel;
-    if (!channel || !channel.isTextBased()) {
-      await interaction.editReply('No readable text channel to scan.');
+    const limit = interaction.options.getInteger('limit') ?? config.backfillLimit;
+    // WORDLE_CHANNEL_ID is required and validated in-guild at startup, so this is
+    // always the configured channel of the server the command runs in.
+    const channel = await interaction.client.channels.fetch(config.channelId);
+    if (!channel?.isTextBased()) {
+      await interaction.editReply('The configured channel is no longer a readable text channel.');
       return;
     }
     const { processed, stored } = await backfillChannel(channel, limit);
