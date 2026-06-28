@@ -1,4 +1,4 @@
-import { Events, MessageFlags, type Client, type Message } from 'discord.js';
+import { Events, MessageFlags, type Client, type Guild, type Message } from 'discord.js';
 import { config } from './config/index.js';
 import { createClient } from './discord/client.js';
 import { ingestMessage } from './ingest/ingest.js';
@@ -10,9 +10,20 @@ import { MEMBER_SYNC_INTERVAL_MS, OFFICIAL_WORDLE_APP_ID } from './constants.js'
 
 const client = createClient();
 const commandMap = new Map(commands.map((c) => [c.data.name, c]));
+const commandData = commands.map((c) => c.data.toJSON());
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// Commands are registered per guild, which updates clients instantly. Global
+// registration is cached by Discord and can take up to an hour to propagate.
+async function registerGuildCommands(guild: Guild): Promise<void> {
+  try {
+    await guild.commands.set(commandData);
+  } catch (err) {
+    console.error(`Registering commands for guild ${guild.id} failed:`, errMessage(err));
+  }
 }
 
 // Re-index members of every guild the bot is in, for identity resolution.
@@ -48,17 +59,22 @@ client.once(Events.ClientReady, async (ready) => {
 
   await loadGuildChannels();
 
-  // Commands are registered globally so they work in every guild the bot joins,
-  // present and future. Per-guild channel selection happens at runtime via
-  // /set-channel.
-  const data = commands.map((c) => c.data.toJSON());
-  await ready.application.commands.set(data);
-  console.log(`Registered ${data.length} global slash commands`);
+  // Register commands in every guild the bot is currently in. Guilds joined
+  // later are handled by the GuildCreate event below.
+  await Promise.all(ready.guilds.cache.map((guild) => registerGuildCommands(guild)));
+  console.log(`Registered ${commandData.length} slash commands across ${ready.guilds.cache.size} guild(s)`);
 
   syncAllGuilds(ready);
   setInterval(() => syncAllGuilds(ready), MEMBER_SYNC_INTERVAL_MS);
 
   if (config.backfillOnStart) await backfillConfiguredChannels(ready);
+});
+
+// A newly joined guild needs its commands registered. This fires only for real
+// joins after startup, not for the initial guild cache load.
+client.on(Events.GuildCreate, async (guild) => {
+  await registerGuildCommands(guild);
+  void syncGuild(guild);
 });
 
 async function react(message: Message, emoji: string): Promise<void> {
