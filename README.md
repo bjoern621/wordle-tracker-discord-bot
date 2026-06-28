@@ -2,7 +2,12 @@
 
 Tracks Wordle results in a Discord server and builds leaderboards (all-time,
 monthly, weekly), per-player stats, and head-to-head comparisons. Self-hosted,
-single server, PostgreSQL storage (schema via pgschema, queries via node-postgres).
+works across every server it is invited to, PostgreSQL storage (schema via
+pgschema, queries via node-postgres).
+
+Each server picks the channel to track with `/set-channel` (admin only). The
+choice is stored per server, so the bot resumes tracking after a restart. A
+server with no channel set is ignored.
 
 ## How results are captured
 
@@ -70,10 +75,10 @@ task setup
 ```
 Fill in every variable in `.env` (see the configuration reference below). The
 bot validates them all at startup and exits with the list of problems if any is
-missing or malformed, so there is nothing optional to skip. `WORDLE_CHANNEL_ID`
-must be a channel inside `GUILD_ID` (enable Developer Mode, right-click the
-channel -> Copy Channel ID). To import existing history on first run, set
-`BACKFILL_ON_START=true`.
+missing or malformed, so there is nothing optional to skip. The channel to track
+is not configured here: run `/set-channel` in each server after the bot starts.
+To import that channel's existing history on first run, set
+`BACKFILL_ON_START=true` (it scans every server that has a channel set).
 
 ### 3. Run
 
@@ -116,7 +121,8 @@ is in the Nix dev shell. Run `task --list` for the full set.
 | `/stats [user] [period]` | Games, win rate, averages, streaks, distribution. |
 | `/distribution [user]` | Guess distribution histogram. |
 | `/compare <user1> [user2]` | Head-to-head over shared puzzles. |
-| `/backfill [limit]` | Re-scan channel history (admin only). |
+| `/backfill [limit]` | Re-scan the tracked channel's history (admin only). |
+| `/set-channel [channel]` | Choose the channel to track in this server (admin only). |
 
 Scoring: a solved game scores its number of guesses; a failed game scores 7.
 Lower average is better.
@@ -156,8 +162,6 @@ malformed; there are no defaults or fallbacks.
 | --- | --- | --- |
 | `DISCORD_TOKEN` | (secret) | Bot token from the Developer Portal. |
 | `DATABASE_URL` | `postgresql://wordle:wordle@localhost:5432/wordle` | Postgres connection string. Compose points it at the `db` service. |
-| `GUILD_ID` | `123…` | The single server the bot operates in. |
-| `WORDLE_CHANNEL_ID` | `123…` | The single channel to track; must belong to `GUILD_ID`. |
 | `TIMEZONE` | `Europe/Berlin` | Group timezone for resolving the daily summary's "yesterday". |
 | `PLAYER_ALIASES` | `Tim=792…,Björn=386…` | `Name=id,…` overrides for unresolved plain-text players. May be empty. |
 | `ENABLE_ACTIVITY_IMAGE` | `true` | Parse the per-game grid image for same-day results. |

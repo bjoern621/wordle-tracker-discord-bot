@@ -4,6 +4,7 @@ import { parsers } from '../parsers/index.js';
 import { recordResult } from '../db/results.repository.js';
 import { numberToIso } from '../domain/wordle.js';
 import { learnUser, resolve, syntheticId } from '../identity/identity.js';
+import { trackedChannel } from '../settings/guild-channels.js';
 import { config } from '../config/index.js';
 
 function messageTimestamp(message: Message): Date {
@@ -60,12 +61,15 @@ async function storeGames(
 
 /**
  * Inspects one message, stores any Wordle result(s) it carries, and reports the
- * outcome or null. Keyed (guild, user, puzzle), so results never double-count;
- * the most recent message wins on conflict.
+ * outcome or null. Only messages in a guild's configured channel (set with
+ * /set-channel) are considered; a guild with no channel is ignored. Keyed
+ * (guild, user, puzzle), so results never double-count; the most recent message
+ * wins on conflict.
  */
 export async function ingestMessage(message: Message): Promise<IngestOutcome | null> {
-  if (message.guildId !== config.guildId) return null;
-  if (message.channelId !== config.channelId) return null;
+  const guildId = message.guildId;
+  if (!guildId) return null;
+  if (message.channelId !== trackedChannel(guildId)) return null;
 
   learnFrom(message);
 
@@ -75,7 +79,7 @@ export async function ingestMessage(message: Message): Promise<IngestOutcome | n
   for (const parser of parsers) {
     const games = await parser.parse(message, ctx);
     if (games && games.length) {
-      return storeGames(parser.source, games, message, config.guildId, ts);
+      return storeGames(parser.source, games, message, guildId, ts);
     }
   }
   return null;

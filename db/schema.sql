@@ -24,3 +24,13 @@ CREATE TABLE results (
 );
 
 CREATE INDEX results_guild_date_idx ON results (guild_id, puzzle_date);
+
+-- One row per guild: the channel the bot reads Wordle results from in that
+-- server. Set with /set-channel and read back on startup, so each guild resumes
+-- tracking after a restart. A guild with no row is ignored entirely.
+CREATE TABLE guild_settings (
+    guild_id   text        NOT NULL,
+    channel_id text        NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (guild_id)
+);

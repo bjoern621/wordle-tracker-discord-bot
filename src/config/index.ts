@@ -4,10 +4,6 @@ export interface Config {
     token: string;
     /** Postgres connection string. */
     databaseUrl: string;
-    /** The single server the bot operates in. */
-    guildId: string;
-    /** The single channel the bot reads results from. */
-    channelId: string;
     /** Group timezone. Daily summaries report "yesterday", resolved in this zone. */
     timeZone: string;
     /** Manual name -> user-id overrides for summary entries that are plain @text. */
@@ -92,8 +88,6 @@ function loadConfig(): Config {
     const config: Config = {
         token: str("DISCORD_TOKEN"),
         databaseUrl: str("DATABASE_URL"),
-        guildId: str("GUILD_ID"),
-        channelId: str("WORDLE_CHANNEL_ID"),
         timeZone: timeZone("TIMEZONE"),
         aliases: aliases("PLAYER_ALIASES"),
         enableActivityImage: bool("ENABLE_ACTIVITY_IMAGE"),

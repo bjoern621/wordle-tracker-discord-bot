@@ -6,6 +6,7 @@ import {
 } from 'discord.js';
 import type { BotCommand } from './command.js';
 import { backfillChannel } from '../ingest/backfill.js';
+import { trackedChannel } from '../settings/guild-channels.js';
 import { config } from '../config/index.js';
 
 /** `/backfill`: admin-only re-scan of channel history to store past results. */
@@ -23,11 +24,14 @@ export const backfillCommand: BotCommand = {
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const channelId = interaction.guildId ? trackedChannel(interaction.guildId) : null;
+    if (!channelId) {
+      await interaction.editReply('No channel is set for this server yet. Run `/set-channel` first.');
+      return;
+    }
     const scanAll = interaction.options.getBoolean('all') ?? false;
     const limit = scanAll ? undefined : interaction.options.getInteger('limit') ?? config.backfillLimit;
-    // WORDLE_CHANNEL_ID is required and validated in-guild at startup, so this is
-    // always the configured channel of the server the command runs in.
-    const channel = await interaction.client.channels.fetch(config.channelId);
+    const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
     if (!channel?.isTextBased()) {
       await interaction.editReply('The configured channel is no longer a readable text channel.');
       return;
