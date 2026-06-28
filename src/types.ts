@@ -3,7 +3,7 @@
 import type { Message } from 'discord.js';
 
 /** Source that produced a stored result. Also the parser priority order. */
-export type ResultSource = 'summary' | 'text' | 'activity';
+export type ResultSource = 'summary' | 'text' | 'scoredle' | 'activity';
 
 /** Leaderboard period selectable in slash commands. */
 export type Period = 'all' | 'month' | 'week';

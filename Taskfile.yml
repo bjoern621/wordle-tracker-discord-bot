@@ -14,6 +14,11 @@ tasks:
     status:
       - test -f .env
 
+  test:
+    desc: Run the unit tests (parsers, grid reader, stats, date math)
+    cmds:
+      - npm test
+
   up:
     desc: Build and start everything (db, migrate, bot)
     cmds:

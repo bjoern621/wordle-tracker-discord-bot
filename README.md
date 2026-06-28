@@ -95,6 +95,7 @@ is in the Nix dev shell. Run `task --list` for the full set.
 
 | Task | Description |
 | --- | --- |
+| `task test` | Run the unit tests (parsers, grid reader, stats, date math). |
 | `task up` | Build and start everything (db, migrate, bot). |
 | `task down` | Stop containers (keeps the database volume). |
 | `task logs` | Follow the bot logs. |
