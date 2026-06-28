@@ -2,8 +2,8 @@
 
 import type { Message } from 'discord.js';
 
-/** Source that produced a stored result. Also the parser priority order. */
-export type ResultSource = 'summary' | 'text' | 'scoredle' | 'activity';
+/** Source that produced a stored result. */
+export type ResultSource = 'summary' | 'share-text' | 'scoredle' | 'activity';
 
 /** Leaderboard period selectable in slash commands. */
 export type Period = 'all' | 'month' | 'week';
@@ -44,8 +44,9 @@ export interface ParseContext {
 }
 
 /**
- * Strategy contract for turning a Discord message into Wordle games. Parsers are
- * tried in registry order; the first to return a non-empty list wins.
+ * Strategy contract for turning a Discord message into Wordle games. Each parser
+ * recognizes its own format and returns null for messages it does not apply to.
+ * Ingest tries them in registry order and takes the first non-empty result.
  */
 export interface WordleParser {
   /** Stored in `results.source` for games this parser produces. */

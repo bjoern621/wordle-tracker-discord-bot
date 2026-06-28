@@ -20,9 +20,9 @@ async function route(message: Message): Promise<ResultSource | null> {
   return null;
 }
 
-test('a Wordle share routes to the text parser', async () => {
+test('a Wordle share routes to the share-text parser', async () => {
   const source = await route(fakeMessage({ content: 'Wordle 1,835 4/6\n\n🟩🟩🟩🟩🟩' }));
-  assert.equal(source, 'text');
+  assert.equal(source, 'share-text');
 });
 
 test('a Scoredle paste routes to the scoredle parser', async () => {

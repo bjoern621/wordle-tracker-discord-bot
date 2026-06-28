@@ -73,7 +73,7 @@ export async function recordResult(r: ResultRecord): Promise<RecordStatus> {
 
     const grid = r.grid ?? existing?.grid ?? null;
     // Only the share-text sources report hard mode; image/summary leave it as-is.
-    const reportsHardMode = r.source === 'text' || r.source === 'scoredle';
+    const reportsHardMode = r.source === 'share-text' || r.source === 'scoredle';
     const hardMode = reportsHardMode ? r.hardMode : existing?.hard_mode ?? r.hardMode;
 
     await client.query(

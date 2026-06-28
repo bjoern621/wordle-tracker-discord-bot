@@ -10,7 +10,7 @@ import { parseEmojiGrid } from './emoji-grid.js';
 const SHARE_RE = /Wordle\s+(\d[\d.,]*)\s+([1-6X])\s*\/\s*6(\*?)/i;
 
 class ShareTextParser implements WordleParser {
-  readonly source = 'text' as const;
+  readonly source = 'share-text' as const;
 
   async parse(message: Message, _ctx: ParseContext): Promise<ParsedGame[] | null> {
     const author = message.author;

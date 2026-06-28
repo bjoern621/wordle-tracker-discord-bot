@@ -6,7 +6,9 @@ single server, PostgreSQL storage (schema via pgschema, queries via node-postgre
 
 ## How results are captured
 
-The bot reads three sources, in priority order:
+The bot reads several message sources, each recognized by its own author and
+format. The richer text sources are preferred when a message could match more
+than one:
 
 1. **Daily summary** (primary). Once a day the official Activity posts one
    message with every player's score for the previous day:
