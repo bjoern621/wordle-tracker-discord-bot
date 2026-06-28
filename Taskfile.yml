@@ -64,16 +64,6 @@ tasks:
     cmds:
       - docker compose run --rm migrate plan --file /schema/schema.sql
 
-  psql:
-    desc: Open a psql shell in the database container
-    cmds:
-      - docker compose exec db psql -U wordle -d wordle
-
-  pgcli:
-    desc: Open pgcli against the database (needs the nix shell and a running db)
-    cmds:
-      - pgcli "$DATABASE_URL"
-
   logger:
     desc: Run the Phase 0 logger, dumping raw messages/embeds to ./data
     cmds:

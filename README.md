@@ -101,7 +101,6 @@ is in the Nix dev shell. Run `task --list` for the full set.
 | `task logs` | Follow the bot logs. |
 | `task migrate` | Apply `db/schema.sql` (pgschema). |
 | `task plan` | Show pending schema changes without applying. |
-| `task psql` | Open a psql shell in the db container. |
 | `task logger` | Run the Phase 0 logger. |
 | `task reset` | Wipe the database volume and restart (destructive). |
 
@@ -120,22 +119,19 @@ Lower average is better.
 
 ## Inspecting the database
 
-A Nix flake provides a dev shell with tools to browse the PostgreSQL database
-(`dbeaver-bin` GUI, `pgcli`, `psql`). Flakes only see git-tracked files, so add
-the flake first:
+A Nix flake provides a dev shell with the `dbeaver-bin` GUI for browsing the
+PostgreSQL database. Flakes only see git-tracked files, so add the flake first:
 
 ```sh
 git add flake.nix flake.lock .envrc
 direnv allow                 # once; loads the flake via .envrc (use flake)
 
 task db                      # if not already running
-task pgcli                   # REPL, or: task psql
 dbeaver                      # GUI; connect to $DATABASE_URL
 ```
 
 `$DATABASE_URL` is set by the shell to `localhost:$POSTGRES_PORT`. Without
-direnv, run `nix develop` for the same environment. To inspect without exposing a
-port, use `task psql`.
+direnv, run `nix develop` for the same environment.
 
 ## Diagnostics
 
