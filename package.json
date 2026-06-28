@@ -1,0 +1,20 @@
+{
+  "name": "wordle-tracker-discord-bot",
+  "version": "0.1.0",
+  "description": "Tracks Wordle results from the official Discord Wordle Activity and builds leaderboards.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node src/bot.js",
+    "logger": "node src/logger.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "pngjs": "^7.0.0"
+  }
+}

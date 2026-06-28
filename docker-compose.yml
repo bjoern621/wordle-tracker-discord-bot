@@ -1,0 +1,21 @@
+services:
+  # The tracker. Run with: docker compose up -d bot
+  bot:
+    build: .
+    env_file: .env
+    command: node src/bot.js
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  # Phase 0 diagnostic: dump raw messages/embeds to ./data to inspect formats.
+  # Run with: docker compose up logger   (not started by default)
+  logger:
+    build: .
+    env_file: .env
+    command: node src/logger.js
+    volumes:
+      - ./data:/app/data
+    profiles:
+      - tools
+    restart: "no"
