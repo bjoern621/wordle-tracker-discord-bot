@@ -31,7 +31,6 @@ export const statsCommand: BotCommand = {
       .addFields(
         { name: 'Games', value: String(s.games), inline: true },
         { name: 'Win rate', value: `${pct(s.winRate)} (${s.wins}/${s.games})`, inline: true },
-        { name: 'Avg guesses', value: fixed(s.avgGuesses), inline: true },
         { name: 'Avg score', value: fixed(s.avgScore), inline: true },
         { name: 'Best', value: s.best ? `${s.best}/6` : '-', inline: true },
         { name: 'Fails', value: String(s.fails), inline: true },

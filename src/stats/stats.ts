@@ -9,7 +9,6 @@ export interface PlayerSummary {
   wins: number;
   fails: number;
   winRate: number;
-  avgGuesses: number | null;
   avgScore: number | null;
   best: number | null;
   distribution: number[];
@@ -38,9 +37,6 @@ export function summarize(rows: UserResultRow[]): PlayerSummary {
   const games = rows.length;
   const wins = rows.filter((r) => r.solved).length;
   const solvedGuesses = rows.filter((r) => r.solved).map((r) => r.guesses);
-  const avgGuesses = solvedGuesses.length
-    ? solvedGuesses.reduce((a, b) => a + b, 0) / solvedGuesses.length
-    : null;
   const avgScore = games
     ? rows.reduce((a, r) => a + (r.solved ? r.guesses : FAIL_SCORE), 0) / games
     : null;
@@ -52,7 +48,6 @@ export function summarize(rows: UserResultRow[]): PlayerSummary {
     wins,
     fails: games - wins,
     winRate: games ? wins / games : 0,
-    avgGuesses,
     avgScore,
     best: solvedGuesses.length ? Math.min(...solvedGuesses) : null,
     distribution,
