@@ -64,7 +64,7 @@ for games seen via share text or the per-game image.
 ### 2. Configure
 
 ```sh
-cp .env.example .env
+task setup
 ```
 Set `DISCORD_TOKEN`, and `WORDLE_CHANNEL_ID` to the Wordle channel (enable
 Developer Mode, right-click the channel -> Copy Channel ID). To import existing
@@ -78,15 +78,15 @@ once and exits), and `bot`. Compose starts them in order: Postgres becomes
 healthy, the schema is applied, then the bot starts.
 
 ```sh
-docker compose up -d --build       # starts db, runs migrate, starts bot
-docker compose logs -f bot
+task up        # starts db, runs migrate, starts bot
+task logs
 ```
 
-To run them separately: `docker compose up -d db`, apply the schema with
-`docker compose run --rm migrate`, then `docker compose up -d bot`. The Postgres
-data lives in the `pgdata` volume and survives `docker compose down` (use
-`docker compose down -v` to wipe it). After editing `db/schema.sql`, re-run the
-`migrate` service to converge the database; it is a no-op when already in sync.
+The phases are also separate tasks: `task db` starts only Postgres and
+`task migrate` applies the schema. The Postgres data lives in the `pgdata` volume
+and survives `task down`; `task reset` wipes the volume and starts fresh. After
+editing `db/schema.sql`, re-run `task migrate` to converge the database; it is a
+no-op when already in sync.
 
 ## Task runner
 
@@ -127,14 +127,14 @@ the flake first:
 git add flake.nix flake.lock .envrc
 direnv allow                 # once; loads the flake via .envrc (use flake)
 
-docker compose up -d db      # if not already running
-pgcli "$DATABASE_URL"        # REPL, or: psql "$DATABASE_URL"
+task db                      # if not already running
+task pgcli                   # REPL, or: task psql
 dbeaver                      # GUI; connect to $DATABASE_URL
 ```
 
 `$DATABASE_URL` is set by the shell to `localhost:$POSTGRES_PORT`. Without
 direnv, run `nix develop` for the same environment. To inspect without exposing a
-port, use `docker compose exec db psql -U wordle wordle`.
+port, use `task psql`.
 
 ## Diagnostics
 
@@ -142,7 +142,7 @@ The Phase 0 logger that dumps raw messages/embeds is still available for
 inspecting new formats:
 
 ```sh
-docker compose up logger
+task logger
 ```
 
 ## Configuration reference
