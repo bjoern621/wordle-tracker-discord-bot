@@ -5,6 +5,7 @@ import { periodRange } from '../domain/wordle.js';
 import { summarize, headToHead, fixed } from '../stats/stats.js';
 import { EMBED_COLOR } from '../constants.js';
 
+/** `/compare`: head-to-head record and average scores between two players over shared puzzles. */
 export const compareCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName('compare')

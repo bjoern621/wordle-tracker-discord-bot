@@ -7,6 +7,7 @@ import { config } from '../config/index.js';
 import { EMBED_COLOR } from '../constants.js';
 import { periodOption, PERIOD_LABEL, periodFrom } from './shared.js';
 
+/** `/stats`: detailed per-player figures (win rate, averages, streaks, distribution) for a period. */
 export const statsCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName('stats')

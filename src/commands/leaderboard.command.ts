@@ -7,6 +7,7 @@ import { config } from '../config/index.js';
 import { EMBED_COLOR } from '../constants.js';
 import { periodOption, PERIOD_LABEL, periodFrom } from './shared.js';
 
+/** `/leaderboard`: ranks all players by average score for a chosen period. */
 export const leaderboardCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName('leaderboard')

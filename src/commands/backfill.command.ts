@@ -8,6 +8,7 @@ import type { BotCommand } from './command.js';
 import { backfillChannel } from '../ingest/backfill.js';
 import { config } from '../config/index.js';
 
+/** `/backfill`: admin-only re-scan of channel history to store past results. */
 export const backfillCommand: BotCommand = {
   data: new SlashCommandBuilder()
     .setName('backfill')
