@@ -27,7 +27,7 @@ export type PlayerRef =
 export interface ParsedGame {
   /** Puzzle number (e.g. 1835). */
   number: number;
-  /** Guesses used (1-6); 6 for a failed game. */
+  /** Rows used (1-6). A failed game fills all 6 rows, so `solved` distinguishes it from a win on the last guess. */
   guesses: number;
   solved: boolean;
   /** Per-guess colour rows (B/Y/G), or null when the source carries no grid. */
