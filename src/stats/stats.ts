@@ -191,15 +191,5 @@ export function headToHead(rows1: UserResultRow[], rows2: UserResultRow[]): Head
   return { common, w1, w2, draw };
 }
 
-export function histogram(distribution: number[]): string {
-  const max = Math.max(1, ...distribution);
-  return distribution
-    .map((count, i) => {
-      const bar = '█'.repeat(Math.round((count / max) * 12)).padEnd(12, '░');
-      return `${i + 1} ${bar} ${count}`;
-    })
-    .join('\n');
-}
-
 export const pct = (x: number): string => `${Math.round(x * 100)}%`;
 export const fixed = (x: number | null, d = 2): string => (x == null ? '-' : x.toFixed(d));

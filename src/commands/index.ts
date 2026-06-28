@@ -3,7 +3,6 @@ import { leaderboardCommand } from './leaderboard.command.js';
 import { statsCommand } from './stats.command.js';
 import { weeklyCommand } from './weekly.command.js';
 import { historyCommand } from './history.command.js';
-import { distributionCommand } from './distribution.command.js';
 import { compareCommand } from './compare.command.js';
 import { backfillCommand } from './backfill.command.js';
 import { setChannelCommand } from './set-channel.command.js';
@@ -15,7 +14,6 @@ export const commands: readonly BotCommand[] = [
   statsCommand,
   weeklyCommand,
   historyCommand,
-  distributionCommand,
   compareCommand,
   backfillCommand,
   setChannelCommand,
