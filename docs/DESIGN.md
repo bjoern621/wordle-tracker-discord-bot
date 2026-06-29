@@ -5,16 +5,17 @@ code alone. Operator and setup instructions live in the [README](../README.md).
 
 ## One row per game
 
-The `results` table holds one row per `(guild_id, user_id, puzzle_number)`. It is
-the single source of truth for a game: puzzle number and date, guess count,
-win/loss, the per-guess colour grid when a source provides one, hard-mode flag,
-and the source and message timestamp used to resolve conflicts. Schema:
-[db/schema.sql](../db/schema.sql).
+The `results` table holds one row per `(guild_id, user_id, puzzle_number)`, the
+single source of truth for a game: puzzle number and date, guess count, win/loss,
+hard-mode flag, and the source and message timestamp used to resolve conflicts.
+Three fields are filled only when a source carries them: the per-guess colour grid
+(manual share text or a per-game image), and the guessed words and answer (a
+pasted `/status`). Schema: [db/schema.sql](../db/schema.sql).
 
 Every statistic (averages, streaks, distributions, leaderboards, head-to-head) is
-computed in JavaScript from these rows at read time. No aggregate is stored, so a
-correction to a single row is reflected everywhere with no recomputation step.
-The aggregations live in [src/stats/stats.ts](../src/stats/stats.ts).
+computed from these rows at read time. Nothing is aggregated and stored, so
+correcting one row corrects every figure with no rebuild step. The aggregations
+live in [src/stats/stats.ts](../src/stats/stats.ts).
 
 ## Game states
 
@@ -27,31 +28,26 @@ A game is in one of four states. Only the first three have a stored row.
 | **Unfinished** (in progress, abandoned) | yes        | `1-5` / `false`      | yes              | `FAIL_SCORE` (7)     | breaks       |
 | **Not played**                          | no         | n/a                  | no               | none                 | breaks (gap) |
 
-A **failed** game and an **unfinished** game both have `solved = false`, so both
-score as `FAIL_SCORE` and both break the streak. They differ only in the stored
-guess count. A failed game is a completed `X/6`, recorded as `guesses = 6`. An
-unfinished game is a grid with fewer than six rows and no winning row, recorded
-with the number of rows actually played (1-5); a sixth row would make the grid
-terminal, which is the failed case, not the unfinished one. Because the game is
-unsolved, that guess count never reaches an average or distribution. It scores
-`FAIL_SCORE` like any loss, surfacing only as the rows drawn on the partial grid.
+A **failed** and an **unfinished** game both have `solved = false`, so both score
+`FAIL_SCORE` and break the streak. They differ only in stored guess count. A failed
+game is a completed `X/6`, stored as `guesses = 6`. An unfinished game is a partial
+grid with no winning row, stored with the rows actually played (1-5). A sixth row
+would make the grid terminal, i.e. the failed case. Either way the count is a loss:
+it never reaches an average or distribution, surfacing only as the rows on the
+partial grid.
 
-A **not played** day has no row at all. It is excluded from games, wins, and the
-average. It is not a failure. The only place it surfaces is the weekly grid, which
-renders an empty cell for display; that cell adds nothing to any total. A missing
-puzzle still breaks a streak, because a streak requires consecutive solved puzzle
-numbers and the gap ends the run.
+A **not played** day has no row at all. It counts toward nothing (games, wins,
+average) and is not a failure, but its gap still breaks a streak, which requires
+consecutive solved puzzle numbers. Its one appearance is an empty cell on the
+weekly grid, which adds to no total.
 
 ### Unfinished game lifecycle
 
-An unfinished game is recorded the moment its partial grid is seen, then corrected
-if the player returns to finish it. The partial grid is stored with the loss: one
-row per guess played so far, and no winning row. Its play time (see below) is bounded
-at the last guess seen, so an abandoned game has a finite duration rather than one that
-grows with time. The correction relies on conflict
-resolution below: the Activity edits its own message as the player guesses, and
-each edit re-ingests with a newer timestamp, so the finished state overrides the
-stored failure and its complete grid replaces the partial one.
+An unfinished game is stored the moment its partial grid is seen (one row per guess
+so far, no winning row), then corrected if the player returns to finish it. The
+correction rides on conflict resolution below: the Activity edits its own message as
+the player guesses, and each edit re-ingests with a newer timestamp, so the finished
+state and its complete grid override the stored failure.
 
 ```
 guess 3, abandoned     finish on guess 5        (player never returns)
@@ -62,51 +58,43 @@ guess 3, abandoned     finish on guess 5        (player never returns)
                           (5-row grid replaces it)
 ```
 
-If a finishing edit is missed (bot offline, dropped gateway event), the next-day
-summary carries the real score and overrides the failure the same way; the summary
-has no grid, so the stored partial grid is dropped rather than left on the corrected
-row. A grid is only ever carried from one message onto another when both describe
-the same outcome (same guess count and win/loss), so a partial grid can never be
-grafted onto a row a later message marks solved. See
+If the finishing edit is missed (bot offline, dropped gateway event), the next-day
+summary corrects the score the same way. The summary has no grid, so the stale
+partial grid is dropped rather than left on the corrected row. A grid only ever
+carries from one message onto another when both describe the same outcome (same
+guess count and win/loss), so a partial can never land on a row a later message
+marks solved. See
 [src/parsers/activity-image.parser.ts](../src/parsers/activity-image.parser.ts) and
 [src/db/results-merge.ts](../src/db/results-merge.ts).
 
 ## Score
 
-**Average score** is the only average reported. Each game scores its guess
-count, or `FAIL_SCORE` (7, one worse than a 6/6) for a loss, so losses are
-penalised rather than ignored. This is the leaderboard ranking key, lower is
-better.
-
-The per-game scoring rule lives in exactly one function, `penaltyScore` in
-[src/stats/stats.ts](../src/stats/stats.ts), so every average, ranking, and
-head-to-head comparison scores a game the same way. `FAIL_SCORE` is defined in
-[src/constants.ts](../src/constants.ts).
+**Average score** is the only average reported, and the leaderboard ranking key
+(lower is better). Each game scores its guess count, or `FAIL_SCORE` (7, one worse
+than a 6/6) for a loss, so losses are penalised rather than ignored. The rule lives
+in one function, `penaltyScore` in [src/stats/stats.ts](../src/stats/stats.ts), so
+every average, ranking, and head-to-head comparison scores a game the same way.
+`FAIL_SCORE` is in [src/constants.ts](../src/constants.ts).
 
 ## Play time
 
-Each game can carry the time it took to play: `first_guess_at` and `last_guess_at`,
-the span from the first guess to the last guess seen. Only the Activity reveals it.
-The Activity posts its message on the first guess and edits it on each later guess,
-so the message's creation time is the first guess and its latest edit the last. Every
-other source (summary, share text, scoredle, /status) carries no timing and leaves
-both columns null.
+A game can carry how long it took to play: `first_guess_at` and `last_guess_at`, the
+span from the first to the last guess seen. Only the Activity reveals it. It posts on
+the first guess and edits on each later one, so the message's creation time is the
+first guess and its latest edit the last. Every other source leaves both columns null.
 
-An unfinished game ends at the last guess actually observed. `last_guess_at` is the
-Activity's latest edit, never the present, so an abandoned game's duration is a fixed
-interval up to the guess where the player stopped, not a clock that keeps running. The
-schema enforces this: `last_guess_at >= first_guess_at`, and the two are always set or
-cleared together.
+`last_guess_at` is the latest edit, never the present, so an abandoned game has a
+fixed duration up to the guess where the player stopped, not a clock that keeps
+running. The schema enforces this: the two columns are set or cleared together, and
+`last_guess_at >= first_guess_at`. Timing rides with the grid those guesses produced,
+kept while that grid is kept, advanced when an edit re-shares a later grid, dropped
+when a corrected outcome drops the grid. So a game finished off-Activity (corrected by
+the next-day summary) never keeps the abandoned attempt's duration. The merge rule is
+in [src/db/results-merge.ts](../src/db/results-merge.ts).
 
-Timing rides with the grid those guesses produced. It is kept while that grid is kept,
-advanced when an edit re-shares a later grid, and dropped when a corrected outcome drops
-the grid, so a game that is finished off-Activity (corrected by the next-day summary)
-never keeps the abandoned attempt's duration. The merge rule is in
-[src/db/results-merge.ts](../src/db/results-merge.ts).
-
-`/stats` reports the average and fastest solve time over the solved games that carry
-timing. Unfinished games are stored with their bounded duration but excluded from these
-figures: a loss measures an abandoned attempt, not a solve. See `solveTimes` in
+`/stats` reports average and fastest solve time over the solved, timed games. An
+unfinished game keeps its bounded duration but is excluded here: a loss measures an
+abandoned attempt, not a solve. See `solveTimes` in
 [src/stats/stats.ts](../src/stats/stats.ts).
 
 ## Streaks
@@ -119,26 +107,25 @@ longest is the best run over the period. See `streaks` in
 
 ## Conflict resolution
 
-Results never double-count, because the key is `(guild, user, puzzle)` and an
-incoming game for an existing key is merged rather than appended. The rule: the
-**most recent message wins**, by message timestamp (`editedAt ?? createdAt`). This
-makes ingestion order irrelevant, so `/backfill` walking history newest-to-oldest
-cannot corrupt data.
+Results never double-count: the key is `(guild, user, puzzle)`, and an incoming game
+for an existing key is merged, not appended. The rule is **most recent message
+wins**, by message timestamp (`editedAt ?? createdAt`). Ingestion order is therefore
+irrelevant, so `/backfill` walking history newest-to-oldest cannot corrupt data.
 
-One exception: an older message that carries a grid can still backfill the grid
-onto a row that has none, as long as both describe the same outcome (same guess
-count and win/loss), without changing that row's score or source. This keeps colour
-detail from a same-day Activity image when the next-day summary (no grid) was stored
-first during backfill, while keeping a partial grid off a row a later message marks
-solved. The full decision is in
-[src/db/results-merge.ts](../src/db/results-merge.ts).
+The winner fixes the outcome and provenance, but any message can fill a field the
+row is still missing. An older message that carries a grid (and, with it, the words
+and answer) backfills onto a row that has none, when both describe the same outcome,
+without touching its score or source. This recovers the colour grid from a same-day
+Activity image after the gridless next-day summary was stored first during backfill,
+while keeping a partial grid off a row a later message marks solved. The full
+decision is in [src/db/results-merge.ts](../src/db/results-merge.ts).
 
 ## Period scoping
 
-Every command and the scheduled posts compute their figures over a single chosen
-period. The period maps to an inclusive `[from, to]` date range
-(`periodRange`), and every query filters `puzzle_date BETWEEN from AND to`. The
-averages are derived only from the rows in that range, with no lifetime totals
-mixed in. All-time is the same path with an unbounded range. See
+Every command, and the weekly leaderboard post, computes its figures over a single
+chosen period. The period maps to an inclusive `[from, to]` date range
+(`periodRange`), and every query filters `puzzle_date BETWEEN from AND to`. Averages
+come only from rows in that range, with no lifetime totals mixed in. All-time is the
+same path with an unbounded range. See
 [src/domain/wordle.ts](../src/domain/wordle.ts) and
 [src/db/results.repository.ts](../src/db/results.repository.ts).
