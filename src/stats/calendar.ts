@@ -1,7 +1,7 @@
 // Shapes a player's results into a single-month day grid for the /history view.
 
 import type { UserResultRow } from '../db/results.repository.js';
-import { localDateISO, isoToNumber } from '../domain/wordle.js';
+import { localDateISO, isoToNumber, numberToIso } from '../domain/wordle.js';
 
 /** How a single day is drawn. */
 export type DayState =
@@ -26,6 +26,13 @@ export interface MonthData {
   leading: number;
   played: number;
   solved: number;
+}
+
+/** Distinct months ("YYYY-MM") a player has a recorded game in, oldest first. */
+export function playedMonths(rows: readonly UserResultRow[]): string[] {
+  const set = new Set<string>();
+  for (const r of rows) set.add(numberToIso(r.number).slice(0, 7));
+  return [...set].sort();
 }
 
 /** Shapes one month ("YYYY-MM") of a player's results into a day grid. */

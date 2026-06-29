@@ -9,8 +9,8 @@ import {
 } from 'discord.js';
 import type { BotCommand } from './command.js';
 import { getUserResults, type UserResultRow } from '../db/results.repository.js';
-import { periodRange, numberToIso } from '../domain/wordle.js';
-import { buildMonth } from '../stats/calendar.js';
+import { periodRange } from '../domain/wordle.js';
+import { buildMonth, playedMonths } from '../stats/calendar.js';
 import { renderMonthPng } from '../render/month-image.js';
 import { config } from '../config/index.js';
 
@@ -27,13 +27,6 @@ function monthLabel(ym: string): string {
     year: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(Date.UTC(y, m - 1, 1)));
-}
-
-// Distinct months with a recorded game, oldest first.
-function playedMonths(rows: UserResultRow[]): string[] {
-  const set = new Set<string>();
-  for (const r of rows) set.add(numberToIso(r.number).slice(0, 7));
-  return [...set].sort();
 }
 
 function monthMenu(userId: string, months: string[], current: string): Row {

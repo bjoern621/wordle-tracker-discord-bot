@@ -6,7 +6,8 @@
 import { AttachmentBuilder } from 'discord.js';
 import { getResults, getResultsByDay } from '../db/results.repository.js';
 import { numberToIso, isoToNumber } from '../domain/wordle.js';
-import { aggregateLeaderboard, buildWeeklyGrid, fixed } from '../stats/stats.js';
+import { aggregateLeaderboard, buildWeeklyGrid } from '../stats/stats.js';
+import { fixed } from '../stats/format.js';
 import { renderWeeklyPng, type WeeklyImageRow } from '../render/weekly-image.js';
 import { renderRankingPng, type RankingRow } from '../render/ranking-image.js';
 
@@ -98,7 +99,7 @@ async function buildCard(
   const rows: RankingRow[] = entries.map((e) => ({
     name: e.username || e.userId,
     games: e.games,
-    winRate: e.games ? e.wins / e.games : 0,
+    winRate: e.winRate,
     avgScore: e.avgScore,
   }));
 

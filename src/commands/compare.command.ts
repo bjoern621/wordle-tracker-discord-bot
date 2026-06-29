@@ -1,7 +1,8 @@
 import { AttachmentBuilder, SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
 import type { BotCommand } from './command.js';
 import { getUserResults, type UserResultRow } from '../db/results.repository.js';
-import { summarize, headToHead, openerStrength, pct, fixed } from '../stats/stats.js';
+import { summarize, headToHead, openerStrength } from '../stats/stats.js';
+import { pct, fixed, bestLabel, openerLabel } from '../stats/format.js';
 import { renderComparePng, type CompareStat, type Lead } from '../render/compare-image.js';
 import { config } from '../config/index.js';
 import { periodOption, customFromOption, customToOption, resolveRange } from './shared.js';
@@ -21,9 +22,6 @@ function lower(a: number | null, b: number | null): Lead {
   if (b == null) return 1;
   return a < b ? 1 : b < a ? 2 : 0;
 }
-
-const best = (n: number | null): string => (n == null ? '-' : `${n}/6`);
-const opener = (n: number | null): string => (n == null ? '-' : `${n.toFixed(1)}/5`);
 
 // Keeps only the rows for puzzles the other player also played.
 function sharedWith(rows: UserResultRow[], other: UserResultRow[]): UserResultRow[] {
@@ -70,8 +68,8 @@ export const compareCommand: BotCommand = {
     const stats: CompareStat[] = [
       { label: 'Win rate', v1: pct(s1.winRate), v2: pct(s2.winRate), lead: higher(s1.winRate, s2.winRate) },
       { label: 'Avg score', v1: fixed(s1.avgScore), v2: fixed(s2.avgScore), lead: lower(s1.avgScore, s2.avgScore) },
-      { label: 'Best', v1: best(s1.best), v2: best(s2.best), lead: lower(s1.best, s2.best) },
-      { label: 'Opener', v1: opener(o1), v2: opener(o2), lead: higher(o1, o2) },
+      { label: 'Best', v1: bestLabel(s1.best), v2: bestLabel(s2.best), lead: lower(s1.best, s2.best) },
+      { label: 'Opener', v1: openerLabel(o1), v2: openerLabel(o2), lead: higher(o1, o2) },
       { label: 'Longest streak', v1: String(s1.longest), v2: String(s2.longest), lead: higher(s1.longest, s2.longest) },
       // Total games over the whole period (not just shared), so the card shows
       // who plays more beyond the puzzles they have in common.

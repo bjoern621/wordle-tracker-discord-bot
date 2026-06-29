@@ -5,13 +5,25 @@ import type { DailyResultRow, LeaderboardRow, UserResultRow } from '../db/result
 import { FAIL_SCORE } from '../constants.js';
 import { effectiveHardMode, parseStoredGrid } from '../domain/hard-mode.js';
 
-export interface PlayerSummary {
+/**
+ * The score/win/best figures every view derives from a bag of games. One rollup
+ * shared by the per-player summary and each leaderboard entry, so a win rate,
+ * average, or best is computed the same way wherever it appears.
+ */
+export interface GameTotals {
   games: number;
   wins: number;
   fails: number;
   winRate: number;
+  /** Mean penalty score (fails count as FAIL_SCORE); null when no games. */
   avgScore: number | null;
+  /** Mean guesses across wins only; null when no wins. */
+  avgGuesses: number | null;
+  /** Fewest guesses in a win; null when no wins. */
   best: number | null;
+}
+
+export interface PlayerSummary extends GameTotals {
   distribution: number[];
   current: number;
   longest: number;
@@ -19,14 +31,9 @@ export interface PlayerSummary {
   hardMode: number;
 }
 
-export interface LeaderboardEntry {
+export interface LeaderboardEntry extends GameTotals {
   userId: string;
   username: string | null;
-  games: number;
-  wins: number;
-  avgScore: number | null;
-  avgGuesses: number | null;
-  best: number | null;
 }
 
 export interface HeadToHead {
@@ -45,24 +52,42 @@ export function penaltyScore(r: { solved: boolean; guesses: number }): number {
   return r.solved ? r.guesses : FAIL_SCORE;
 }
 
-export function summarize(rows: UserResultRow[]): PlayerSummary {
+/**
+ * Rolls a bag of games into the shared score/win/best figures. The single place
+ * those derivations live, so the per-player summary and every leaderboard entry
+ * average and rank games identically.
+ */
+export function totals(rows: readonly { solved: boolean; guesses: number }[]): GameTotals {
+  let wins = 0;
+  let scoreSum = 0;
+  let guessSum = 0;
+  let best: number | null = null;
+  for (const r of rows) {
+    scoreSum += penaltyScore(r);
+    if (r.solved) {
+      wins += 1;
+      guessSum += r.guesses;
+      best = best == null ? r.guesses : Math.min(best, r.guesses);
+    }
+  }
   const games = rows.length;
-  const wins = rows.filter((r) => r.solved).length;
-  const solvedGuesses = rows.filter((r) => r.solved).map((r) => r.guesses);
-  const avgScore = games
-    ? rows.reduce((a, r) => a + penaltyScore(r), 0) / games
-    : null;
-  const distribution = [1, 2, 3, 4, 5, 6].map(
-    (g) => rows.filter((r) => r.solved && r.guesses === g).length,
-  );
   return {
     games,
     wins,
     fails: games - wins,
     winRate: games ? wins / games : 0,
-    avgScore,
-    best: solvedGuesses.length ? Math.min(...solvedGuesses) : null,
-    distribution,
+    avgScore: games ? scoreSum / games : null,
+    avgGuesses: wins ? guessSum / wins : null,
+    best,
+  };
+}
+
+export function summarize(rows: UserResultRow[]): PlayerSummary {
+  return {
+    ...totals(rows),
+    distribution: [1, 2, 3, 4, 5, 6].map(
+      (g) => rows.filter((r) => r.solved && r.guesses === g).length,
+    ),
     hardMode: rows.filter(effectiveHardMode).length,
     ...streaks(rows),
   };
@@ -117,41 +142,15 @@ export function openerStrength(rows: UserResultRow[]): number | null {
  * games count as FAIL_SCORE), then by games played.
  */
 export function aggregateLeaderboard(rows: LeaderboardRow[]): LeaderboardEntry[] {
-  interface Acc {
-    userId: string;
-    username: string | null;
-    games: number;
-    wins: number;
-    scoreSum: number;
-    guessSum: number;
-    best: number | null;
-  }
-  const byUser = new Map<string, Acc>();
+  const byUser = new Map<string, { username: string | null; rows: LeaderboardRow[] }>();
   for (const r of rows) {
     let u = byUser.get(r.userId);
-    if (!u) {
-      u = { userId: r.userId, username: r.username, games: 0, wins: 0, scoreSum: 0, guessSum: 0, best: null };
-      byUser.set(r.userId, u);
-    }
+    if (!u) byUser.set(r.userId, (u = { username: r.username, rows: [] }));
     if (r.username) u.username = r.username;
-    u.games += 1;
-    u.scoreSum += penaltyScore(r);
-    if (r.solved) {
-      u.wins += 1;
-      u.guessSum += r.guesses;
-      u.best = u.best == null ? r.guesses : Math.min(u.best, r.guesses);
-    }
+    u.rows.push(r);
   }
-  return [...byUser.values()]
-    .map((u) => ({
-      userId: u.userId,
-      username: u.username,
-      games: u.games,
-      wins: u.wins,
-      avgScore: u.games ? u.scoreSum / u.games : null,
-      avgGuesses: u.wins ? u.guessSum / u.wins : null,
-      best: u.best,
-    }))
+  return [...byUser.entries()]
+    .map(([userId, u]) => ({ userId, username: u.username, ...totals(u.rows) }))
     .sort((a, b) => (a.avgScore ?? 0) - (b.avgScore ?? 0) || b.games - a.games);
 }
 
@@ -216,6 +215,3 @@ export function headToHead(rows1: UserResultRow[], rows2: UserResultRow[]): Head
   }
   return { common, w1, w2, draw };
 }
-
-export const pct = (x: number): string => `${Math.round(x * 100)}%`;
-export const fixed = (x: number | null, d = 2): string => (x == null ? '-' : x.toFixed(d));
