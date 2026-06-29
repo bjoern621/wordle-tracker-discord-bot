@@ -45,25 +45,29 @@ numbers and the gap ends the run.
 ### Unfinished game lifecycle
 
 An unfinished game is recorded the moment its partial grid is seen, then corrected
-if the player returns to finish it. The correction relies on conflict resolution
-below: the Activity edits its own message as the player guesses, and each edit
-re-ingests with a newer timestamp, so the finished state overrides the stored
-failure.
+if the player returns to finish it. The partial grid is stored with the loss: one
+row per guess played so far, and no winning row. The correction relies on conflict
+resolution below: the Activity edits its own message as the player guesses, and
+each edit re-ingests with a newer timestamp, so the finished state overrides the
+stored failure and its complete grid replaces the partial one.
 
 ```
 guess 3, abandoned     finish on guess 5        (player never returns)
         │                       │                        │
         ▼                       ▼                        ▼
   store 3/false           edit re-ingests          row stays 3/false
-  (counts as fail)        store 5/true             (correct: it was a loss)
-                          (overrides fail)
+  (3-row partial grid)    store 5/true             (correct: it was a loss)
+                          (5-row grid replaces it)
 ```
 
 If a finishing edit is missed (bot offline, dropped gateway event), the next-day
-summary carries the real score and overrides the failure the same way. The
-partial grid is dropped on store (`grid = null`) so it can never be borrowed onto
-a row a later summary marks solved. See
-[src/parsers/activity-image.parser.ts](../src/parsers/activity-image.parser.ts).
+summary carries the real score and overrides the failure the same way; the summary
+has no grid, so the stored partial grid is dropped rather than left on the corrected
+row. A grid is only ever carried from one message onto another when both describe
+the same outcome (same guess count and win/loss), so a partial grid can never be
+grafted onto a row a later message marks solved. See
+[src/parsers/activity-image.parser.ts](../src/parsers/activity-image.parser.ts) and
+[src/db/results-merge.ts](../src/db/results-merge.ts).
 
 ## Score
 
@@ -94,9 +98,11 @@ makes ingestion order irrelevant, so `/backfill` walking history newest-to-oldes
 cannot corrupt data.
 
 One exception: an older message that carries a grid can still backfill the grid
-onto a row that has none, without changing that row's score or source. This keeps
-colour detail from a same-day Activity image when the next-day summary (no grid)
-was stored first during backfill. The full decision is in
+onto a row that has none, as long as both describe the same outcome (same guess
+count and win/loss), without changing that row's score or source. This keeps colour
+detail from a same-day Activity image when the next-day summary (no grid) was stored
+first during backfill, while keeping a partial grid off a row a later message marks
+solved. The full decision is in
 [src/db/results-merge.ts](../src/db/results-merge.ts).
 
 ## Period scoping

@@ -37,20 +37,18 @@ class ActivityImageParser implements WordleParser {
     const number = numberForTimestamp(message.createdAt, ctx.timeZone, 0);
     const who = { kind: 'known' as const, user: { id: player.id, name: player.globalName || player.username } };
 
-    // An unfinished grid is recorded immediately as a failure, on any day: a game
-    // in progress counts as not-yet-solved and breaks the streak. The stored guess
-    // count is the rows actually played so far (1-5, since a sixth row is a
-    // terminal failure, not an unfinished game); solved is false, so the game
-    // scores FAIL_SCORE regardless of that count. If the player comes back and
-    // finishes, the Activity edits its message; that edit re-ingests with a newer
-    // timestamp and overrides this row with the real score (planResultWrite: most
-    // recent message wins). The next-day summary is a second correction path when
-    // the edit is missed. The partial grid is dropped so it cannot be borrowed onto
-    // a row a later summary marks solved.
-    if (!grid.complete) {
-      return [{ number, guesses: grid.guesses, solved: false, hardMode: null, grid: null, player: who }];
-    }
-
+    // Every state the image shows is stored with its colour grid, the unfinished
+    // game included. An in-progress grid (fewer than six rows, no winning row) is
+    // recorded right away as a not-yet-solved loss, on any day: it breaks the
+    // streak and scores FAIL_SCORE. Its guess count is the rows actually played so
+    // far (1-5, since a sixth row is a terminal failure, not an unfinished game)
+    // and its grid is the partial pattern, which has no all-green row. If the
+    // player finishes, the Activity edits its message; the edit re-ingests with a
+    // newer timestamp and overrides this row with the real score and complete grid
+    // (planResultWrite: most recent message wins). The next-day summary is a second
+    // correction path when the edit is missed. A correction never keeps the partial
+    // grid: the merge only carries a grid between rows of the same outcome, so a
+    // partial grid can never end up on a row marked solved (see results-merge.ts).
     return [
       {
         number,

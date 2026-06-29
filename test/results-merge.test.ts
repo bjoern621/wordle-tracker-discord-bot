@@ -131,10 +131,46 @@ test('a share-text source sets hard mode from its own value', () => {
   assert.equal(plan.kind === 'upsert' && plan.hardMode, true);
 });
 
-// Enrichment keeps the newer summary authoritative for the score; only the grid
-// is borrowed. A score correction would arrive as its own newer message.
-test('grid enrichment does not change the stored score', () => {
+// Enrichment only borrows a grid that describes the stored row. An older grid for
+// a different outcome (here 3 guesses against a stored 4) would not match the row
+// it lands on, so it is rejected as stale rather than grafted on.
+test('an older grid for a different outcome is not borrowed', () => {
   const existing = existingRow({ guesses: 4, solved: true, grid: null, message_ts: T_NEXT });
   const plan = planResultWrite(existing, incoming({ source: 'activity', guesses: 3, grid: 'YYGGG', messageTs: T_DAY }));
-  assert.deepEqual(plan, { kind: 'enrich-grid', grid: 'YYGGG', status: 'updated' });
+  assert.deepEqual(plan, { kind: 'skip', status: 'stale' });
+});
+
+// The backfill order for an unfinished game: the next-day summary (solved, no grid)
+// is stored first, then the older same-day activity image carrying the partial grid
+// arrives. The partial grid describes a loss, so it must not be grafted onto the
+// solved row; the constraint that would otherwise break is solved-but-no-GGGGG.
+test('an older unfinished partial grid is not borrowed onto a solved row', () => {
+  const existing = existingRow({ guesses: 5, solved: true, grid: null, message_ts: T_NEXT });
+  const plan = planResultWrite(
+    existing,
+    incoming({ source: 'activity', guesses: 3, solved: false, grid: 'BYBBG', messageTs: T_DAY }),
+  );
+  assert.deepEqual(plan, { kind: 'skip', status: 'stale' });
+});
+
+// Live order: the unfinished game is stored first with its partial grid, then the
+// next-day summary (no grid) corrects it to a solve. The summary's outcome differs,
+// so the stored partial grid is dropped rather than left on the now-solved row.
+test('a newer gridless solve drops a stored partial grid', () => {
+  const existing = existingRow({ guesses: 3, solved: false, grid: 'BYBBG', message_ts: T_DAY });
+  const plan = planResultWrite(
+    existing,
+    incoming({ source: 'summary', guesses: 5, solved: true, grid: null, messageTs: T_NEXT }),
+  );
+  assert.deepEqual(plan, { kind: 'upsert', grid: null, hardMode: false, status: 'updated' });
+});
+
+// The finishing edit carries its own complete grid, which replaces the partial one.
+test('a finishing edit replaces the stored partial grid with its complete grid', () => {
+  const existing = existingRow({ guesses: 3, solved: false, grid: 'BYBBG', message_ts: T_DAY });
+  const plan = planResultWrite(
+    existing,
+    incoming({ source: 'activity', guesses: 5, solved: true, grid: 'GGGGG', messageTs: T_NEXT }),
+  );
+  assert.deepEqual(plan, { kind: 'upsert', grid: 'GGGGG', hardMode: false, status: 'updated' });
 });
