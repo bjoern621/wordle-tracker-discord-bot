@@ -37,59 +37,60 @@ export interface ExistingRow {
  * What recordResult should do with an incoming record given the row already
  * stored (if any):
  * - `upsert`: insert, or overwrite the existing row with the incoming one.
- * - `enrich-grid`: leave the newer existing row's score/source/timestamp alone
- *   and only fill in its missing grid from this older, grid-bearing message.
+ * - `enrich`: leave the newer existing row's win/loss, source, and timestamp
+ *   alone and only refine its guess count and grid from this older, grid-bearing
+ *   message.
  * - `skip`: the incoming message adds nothing; ignore it.
  */
 export type MergeAction =
-  | { kind: 'upsert'; grid: string | null; hardMode: boolean; status: RecordStatus }
-  | { kind: 'enrich-grid'; grid: string; status: 'updated' }
+  | { kind: 'upsert'; guesses: number; grid: string | null; hardMode: boolean; status: RecordStatus }
+  | { kind: 'enrich'; guesses: number; grid: string; status: 'updated' }
   | { kind: 'skip'; status: 'stale' };
 
 /**
- * Whether two records describe the same game outcome. A grid encodes both its
- * guess count (one row each) and the win/loss (a solved game ends on an all-green
- * row, a loss never has one), so a grid only correctly describes a row when their
- * outcomes match. Carrying a grid between rows of differing outcome would graft,
- * for example, an unfinished game's partial grid onto a row a later message marked
- * solved.
- */
-function sameOutcome(a: { guesses: number; solved: boolean }, b: { guesses: number; solved: boolean }): boolean {
-  return a.guesses === b.guesses && a.solved === b.solved;
-}
-
-/**
  * Decides how to persist an incoming game against the row already stored for the
- * same (guild, user, puzzle). The most recent message wins by message_ts, with
- * one exception: an older message that carries a grid can still backfill the grid
- * onto a row that has none, provided both describe the same outcome. That case
- * matters for `/backfill`, which walks history newest-to-oldest and so stores the
- * next-day summary (no grid) before reaching the same-day activity image (grid);
- * without the exception the image is rejected as stale and its grid is lost. The
- * outcome check keeps a partial grid from an unfinished game off a row a later
- * message marked solved.
+ * same (guild, user, puzzle).
+ *
+ * The most recent message wins the win/loss outcome and the provenance (source,
+ * timestamp, author). The guess count and grid are decided separately, because a
+ * grid is the true guess count: it has one row per guess actually played, whereas
+ * a daily summary reports any loss only as "X/6" and so records six even when the
+ * solo activity image shows the game was abandoned earlier. So whenever two
+ * messages agree on the win/loss, the grid-bearing one's guess count and grid are
+ * kept, regardless of arrival order. A grid is never carried onto a row of the
+ * other win/loss, so a partial loss grid cannot land on a row a later message
+ * marked solved.
  */
 export function planResultWrite(existing: ExistingRow | undefined, r: ResultRecord): MergeAction {
-  if (existing && r.messageTs < existing.message_ts) {
-    // Older than what is stored. Borrow only the grid, and only if it adds one the
-    // existing row lacks and describes the same outcome; the newer row stays
-    // authoritative for everything else.
-    if (r.grid && !existing.grid && sameOutcome(existing, r)) {
-      return { kind: 'enrich-grid', grid: r.grid, status: 'updated' };
-    }
-    return { kind: 'skip', status: 'stale' };
-  }
-
-  // First sighting, or newer-or-equal: the incoming row wins. Its own grid always
-  // matches its outcome; an existing grid is kept only when the new outcome is the
-  // one it was drawn for, otherwise dropped so a stale partial grid never sits on a
-  // corrected row. Inherit hard mode from the stored row unless this source reports it.
-  const grid = r.grid ?? (existing && sameOutcome(existing, r) ? existing.grid : null);
   const hardMode = reportsHardMode(r.source) ? r.hardMode : existing?.hard_mode ?? r.hardMode;
 
-  let status: RecordStatus;
-  if (!existing) status = 'inserted';
-  else status = existing.guesses !== r.guesses || existing.solved !== r.solved ? 'updated' : 'unchanged';
+  if (!existing) {
+    return { kind: 'upsert', guesses: r.guesses, grid: r.grid, hardMode, status: 'inserted' };
+  }
 
-  return { kind: 'upsert', grid, hardMode, status };
+  if (r.messageTs >= existing.message_ts) {
+    // Newer or equal: the incoming row wins the outcome and provenance. The guess
+    // count and grid come from whichever message carries a grid for this win/loss;
+    // the incoming grid is preferred, otherwise the stored grid is kept only when it
+    // was drawn for the same win/loss, so a stale loss grid never sits on a row this
+    // message marks solved.
+    let guesses = r.guesses;
+    let grid = r.grid;
+    if (!grid && existing.grid && existing.solved === r.solved) {
+      guesses = existing.guesses;
+      grid = existing.grid;
+    }
+    const status: RecordStatus =
+      existing.guesses !== guesses || existing.solved !== r.solved ? 'updated' : 'unchanged';
+    return { kind: 'upsert', guesses, grid, hardMode, status };
+  }
+
+  // Older than what is stored: it cannot change the outcome or provenance. A grid it
+  // carries for the same win/loss refines the stored guess count and grid when the
+  // row has none, which is the backfill order for a busted player: the gridless
+  // summary lands first, then the older solo image supplies the real count and grid.
+  if (r.grid && !existing.grid && existing.solved === r.solved) {
+    return { kind: 'enrich', guesses: r.guesses, grid: r.grid, status: 'updated' };
+  }
+  return { kind: 'skip', status: 'stale' };
 }
