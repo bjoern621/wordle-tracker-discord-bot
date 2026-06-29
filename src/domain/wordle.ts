@@ -62,7 +62,7 @@ export function rejectFuturePuzzles<T extends { number: number }>(
 }
 
 /** Periods offered by the leaderboard and stats commands, ordered widest first. */
-export const PERIODS = ['all', 'year', 'month', 'week', 'day'] as const;
+export const PERIODS = ['all', 'year', 'month', 'week', 'lastweek', 'day'] as const;
 
 /** Human label for each period, shown in command choices and image titles. */
 export const PERIOD_LABEL: Record<Period, string> = {
@@ -70,6 +70,7 @@ export const PERIOD_LABEL: Record<Period, string> = {
   year: 'This year',
   month: 'This month',
   week: 'This week',
+  lastweek: 'Last week',
   day: 'Today',
 };
 
@@ -78,6 +79,74 @@ export function periodFrom(value: string | null): Period {
   return value != null && (PERIODS as readonly string[]).includes(value)
     ? (value as Period)
     : 'all';
+}
+
+/** Inclusive [from, to] ISO bounds plus a display label for a chosen range. */
+export interface ResolvedPeriod {
+  from: string;
+  to: string;
+  label: string;
+}
+
+/** Outcome of resolving period/custom-date options: a range or a user-facing error. */
+export type PeriodResolution =
+  | { ok: true; range: ResolvedPeriod }
+  | { ok: false; error: string };
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** True when `value` is a YYYY-MM-DD string naming a real calendar date. */
+export function isValidISODate(value: string): boolean {
+  if (!ISO_DATE.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+// "2026-06-01" -> "Jun 1, 2026".
+function isoDayLabel(iso: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${iso}T00:00:00Z`));
+}
+
+// Display label for a custom range, collapsing to one date when from == to.
+function customRangeLabel(from: string, to: string): string {
+  return from === to ? isoDayLabel(from) : `${isoDayLabel(from)} - ${isoDayLabel(to)}`;
+}
+
+/**
+ * Resolves the period dropdown and optional custom from/to dates into one range.
+ * Custom dates take precedence when either is given: both bounds are then
+ * required, must be valid YYYY-MM-DD dates, and `from` must not be after `to`.
+ * Falls back to the preset period otherwise.
+ */
+export function resolvePeriod(
+  periodValue: string | null,
+  fromValue: string | null,
+  toValue: string | null,
+  timeZone = 'UTC',
+): PeriodResolution {
+  if (fromValue != null || toValue != null) {
+    if (fromValue == null || toValue == null) {
+      return { ok: false, error: 'A custom period needs both a `from` and a `to` date.' };
+    }
+    if (!isValidISODate(fromValue) || !isValidISODate(toValue)) {
+      return { ok: false, error: 'Custom dates must be real calendar dates in YYYY-MM-DD form.' };
+    }
+    if (fromValue > toValue) {
+      return { ok: false, error: 'The `from` date must be on or before the `to` date.' };
+    }
+    return {
+      ok: true,
+      range: { from: fromValue, to: toValue, label: customRangeLabel(fromValue, toValue) },
+    };
+  }
+  const period = periodFrom(periodValue);
+  const [from, to] = periodRange(period, timeZone);
+  return { ok: true, range: { from, to, label: PERIOD_LABEL[period] } };
 }
 
 /** Inclusive [from, to] ISO date bounds for a leaderboard period, in timezone. */
@@ -89,6 +158,9 @@ export function periodRange(period: Period, timeZone = 'UTC'): [string, string] 
   if (period === 'week') {
     const dow = (new Date(`${todayIso}T00:00:00Z`).getUTCDay() + 6) % 7; // 0 = Monday
     return [shiftISO(todayIso, -dow), shiftISO(todayIso, 6 - dow)];
+  }
+  if (period === 'lastweek') {
+    return lastWeekRange(timeZone);
   }
   if (period === 'month') {
     const first = `${todayIso.slice(0, 7)}-01`;

@@ -9,6 +9,10 @@ Each server picks the channel to track with `/set-channel` (admin only). The
 choice is stored per server, so the bot resumes tracking after a restart. A
 server with no channel set is ignored.
 
+The design decisions behind result tracking and statistics (game states, how
+averages and streaks are computed, conflict resolution) are documented in
+[docs/DESIGN.md](docs/DESIGN.md).
+
 ## How results are captured
 
 The bot reads several message sources, each recognized by its own author and

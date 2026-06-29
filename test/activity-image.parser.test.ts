@@ -1,7 +1,7 @@
 // Exercises the activity-image parser against real Activity preview PNGs, with
-// fetch stubbed to serve the fixture bytes. Covers the abandoned-game rule: an
-// unfinished grid becomes a failure once its puzzle day has passed, but is left
-// alone while the day is still current.
+// fetch stubbed to serve the fixture bytes. Covers the unfinished-game rule: an
+// unfinished grid is recorded as a failure immediately, on any day, and is
+// overridden later if the player finishes the puzzle.
 
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -59,10 +59,13 @@ test('an unfinished grid for a past day is recorded as a failure with no grid', 
   assert.equal(games[0].grid, null);
 });
 
-test('an unfinished grid for the current day is left unrecorded', async () => {
+test('an unfinished grid for the current day is also recorded as a failure', async () => {
   stubFetch(fixture('abandoned-3of6.png'));
   const games = await activityImageParser.parse(activityMessage(new Date()), ctx);
-  assert.equal(games, null);
+  assert.ok(games && games.length === 1);
+  assert.equal(games[0].solved, false);
+  assert.equal(games[0].guesses, 6);
+  assert.equal(games[0].grid, null);
 });
 
 test('multi-player images are ignored regardless of grid state', async () => {

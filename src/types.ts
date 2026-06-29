@@ -6,7 +6,7 @@ import type { Message } from 'discord.js';
 export type ResultSource = 'summary' | 'share-text' | 'scoredle' | 'activity';
 
 /** Leaderboard period selectable in slash commands. */
-export type Period = 'all' | 'year' | 'month' | 'week' | 'day';
+export type Period = 'all' | 'year' | 'month' | 'week' | 'lastweek' | 'day';
 
 /** A player the parser already knows by id and display name. */
 export interface KnownUser {

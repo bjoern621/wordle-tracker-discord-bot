@@ -6,7 +6,7 @@
 import type { Message } from 'discord.js';
 import type { ParseContext, ParsedGame, WordleParser } from '../types.js';
 import { OFFICIAL_WORDLE_APP_ID } from '../constants.js';
-import { currentNumber, numberForTimestamp } from '../domain/wordle.js';
+import { numberForTimestamp } from '../domain/wordle.js';
 import { parseGrid } from '../grid/grid-reader.js';
 
 const MULTI_PLAYER_RE = /\band\b|\bothers\b/i;
@@ -37,14 +37,14 @@ class ActivityImageParser implements WordleParser {
     const number = numberForTimestamp(message.createdAt, ctx.timeZone, 0);
     const who = { kind: 'known' as const, user: { id: player.id, name: player.globalName || player.username } };
 
-    // An unfinished grid only counts once its puzzle day has passed: a player who
-    // opened the puzzle, guessed a few times and never came back is recorded as a
-    // failure instead of vanishing. While the day is still current the game may
-    // yet be finished, so it is left unrecorded (a later edit re-ingests it). The
-    // partial grid is dropped so it cannot be borrowed onto a row the next-day
-    // summary later marks solved.
+    // An unfinished grid is recorded immediately as a failure, on any day: a game
+    // in progress counts as not-yet-solved and breaks the streak. If the player
+    // comes back and finishes, the Activity edits its message; that edit re-ingests
+    // with a newer timestamp and overrides this row with the real score
+    // (planResultWrite: most recent message wins). The next-day summary is a second
+    // correction path when the edit is missed. The partial grid is dropped so it
+    // cannot be borrowed onto a row a later summary marks solved.
     if (!grid.complete) {
-      if (number >= currentNumber(ctx.timeZone)) return null;
       return [{ number, guesses: 6, solved: false, hardMode: null, grid: null, player: who }];
     }
 

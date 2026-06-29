@@ -1,12 +1,11 @@
 import { AttachmentBuilder, SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
 import type { BotCommand } from './command.js';
 import { getUserResults } from '../db/results.repository.js';
-import { periodRange } from '../domain/wordle.js';
 import { summarize, pct, fixed } from '../stats/stats.js';
 import { renderStatsPng, type StatTile, type StatBar } from '../render/stats-image.js';
 import { greenFor, FAILED } from '../render/theme.js';
 import { config } from '../config/index.js';
-import { periodOption, PERIOD_LABEL, periodFrom } from './shared.js';
+import { periodOption, customFromOption, customToOption, resolveRange } from './shared.js';
 
 /** `/stats`: detailed per-player figures (win rate, averages, streaks, distribution) for a period. */
 export const statsCommand: BotCommand = {
@@ -14,13 +13,15 @@ export const statsCommand: BotCommand = {
     .setName('stats')
     .setDescription('Detailed stats for a player')
     .addUserOption((o) => o.setName('user').setDescription('Player (default: you)'))
-    .addStringOption(periodOption),
+    .addStringOption(periodOption)
+    .addStringOption(customFromOption)
+    .addStringOption(customToOption),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const user = interaction.options.getUser('user') || interaction.user;
-    const period = periodFrom(interaction.options.getString('period'));
-    const [from, to] = periodRange(period, config.timeZone);
-    const rows = await getUserResults(interaction.guildId!, user.id, from, to);
+    const range = await resolveRange(interaction, config.timeZone);
+    if (!range) return;
+    const rows = await getUserResults(interaction.guildId!, user.id, range.from, range.to);
     if (!rows.length) {
       await interaction.reply(`No results recorded for ${user.username} in that period.`);
       return;
@@ -50,7 +51,7 @@ export const statsCommand: BotCommand = {
       color: FAILED,
     });
 
-    const png = renderStatsPng({ name: user.username, period: PERIOD_LABEL[period], tiles, bars });
+    const png = renderStatsPng({ name: user.username, period: range.label, tiles, bars });
     const file = new AttachmentBuilder(png, { name: 'stats.png' });
     await interaction.reply({ files: [file] });
   },

@@ -16,7 +16,7 @@ async function postWeeklyLeaderboards(client: Client): Promise<void> {
   const [from, to] = lastWeekRange(config.timeZone);
   for (const { guildId, channelId } of trackedChannels()) {
     try {
-      const report = await buildLeaderboard(guildId, 'week', from, to, REPORT_HEADING);
+      const report = await buildLeaderboard(guildId, from, to, 'Last week', REPORT_HEADING);
       if (!report) {
         console.log(`Weekly leaderboard for guild ${guildId}: no results for ${from}..${to}, skipping.`);
         continue;

@@ -1,18 +1,17 @@
 // Builds the leaderboard image shared by the `/leaderboard` command and the
-// scheduled Monday post. Short periods (day, week) render a day-by-day grid,
-// one row per player; longer periods (month, year, all time) render a ranked
-// card of aggregate figures, since a column-per-day grid would not fit.
+// scheduled Monday post. Short spans render a day-by-day grid, one row per
+// player; longer spans render a ranked card of aggregate figures, since a
+// column-per-day grid would not fit.
 
 import { AttachmentBuilder } from 'discord.js';
 import { getResults, getResultsByDay } from '../db/results.repository.js';
-import { numberToIso, isoToNumber, PERIOD_LABEL } from '../domain/wordle.js';
+import { numberToIso, isoToNumber } from '../domain/wordle.js';
 import { aggregateLeaderboard, buildWeeklyGrid, fixed } from '../stats/stats.js';
 import { renderWeeklyPng, type WeeklyImageRow } from '../render/weekly-image.js';
 import { renderRankingPng, type RankingRow } from '../render/ranking-image.js';
-import type { Period } from '../types.js';
 
-/** Periods rendered as a day-by-day grid rather than an aggregate card. */
-const GRID_PERIODS: ReadonlySet<Period> = new Set<Period>(['day', 'week']);
+/** Spans up to this many days render as a day-by-day grid; longer ones as an aggregate card. */
+const GRID_MAX_DAYS = 8;
 
 export interface LeaderboardReport {
   content?: string;
@@ -34,20 +33,22 @@ function dateLabel(number: number): string {
 }
 
 /**
- * Renders the leaderboard for `[from, to]` in a guild. `period` selects the
- * layout; `heading` is prepended to the message when set (used by the Monday
- * post). Returns null when nobody in the guild played that range.
+ * Renders the leaderboard for `[from, to]` in a guild. The span length picks the
+ * layout; `label` titles the aggregate card; `heading` is prepended to the
+ * message when set (used by the Monday post). Returns null when nobody in the
+ * guild played that range.
  */
 export async function buildLeaderboard(
   guildId: string,
-  period: Period,
   from: string,
   to: string,
+  label: string,
   heading?: string,
 ): Promise<LeaderboardReport | null> {
-  return GRID_PERIODS.has(period)
+  const days = isoToNumber(to) - isoToNumber(from) + 1;
+  return days <= GRID_MAX_DAYS
     ? buildGrid(guildId, from, to, heading)
-    : buildCard(guildId, period, from, to, heading);
+    : buildCard(guildId, from, to, label, heading);
 }
 
 // Day-by-day grid: one column per puzzle in the range, one row per player.
@@ -86,9 +87,9 @@ async function buildGrid(
 // Ranked card: aggregate figures per player for the whole range.
 async function buildCard(
   guildId: string,
-  period: Period,
   from: string,
   to: string,
+  label: string,
   heading?: string,
 ): Promise<LeaderboardReport | null> {
   const entries = aggregateLeaderboard(await getResults(guildId, from, to));
@@ -101,7 +102,7 @@ async function buildCard(
     avgScore: e.avgScore,
   }));
 
-  const png = renderRankingPng({ title: 'Wordle Leaderboard', span: PERIOD_LABEL[period], rows });
+  const png = renderRankingPng({ title: 'Wordle Leaderboard', span: label, rows });
   const file = new AttachmentBuilder(png, { name: 'leaderboard.png' });
   return { content: heading, files: [file] };
 }

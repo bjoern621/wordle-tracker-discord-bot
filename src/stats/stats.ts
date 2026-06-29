@@ -3,7 +3,7 @@
 
 import type { DailyResultRow, LeaderboardRow, UserResultRow } from '../db/results.repository.js';
 import { FAIL_SCORE } from '../constants.js';
-import { effectiveHardMode } from '../domain/hard-mode.js';
+import { effectiveHardMode, parseStoredGrid } from '../domain/hard-mode.js';
 
 export interface PlayerSummary {
   games: number;
@@ -36,12 +36,21 @@ export interface HeadToHead {
   draw: number;
 }
 
+/**
+ * The score a single game contributes to an average or ranking: the number of
+ * guesses for a win, or FAIL_SCORE for a loss. The one place this rule lives, so
+ * every average and head-to-head comparison scores games identically.
+ */
+export function penaltyScore(r: { solved: boolean; guesses: number }): number {
+  return r.solved ? r.guesses : FAIL_SCORE;
+}
+
 export function summarize(rows: UserResultRow[]): PlayerSummary {
   const games = rows.length;
   const wins = rows.filter((r) => r.solved).length;
   const solvedGuesses = rows.filter((r) => r.solved).map((r) => r.guesses);
   const avgScore = games
-    ? rows.reduce((a, r) => a + (r.solved ? r.guesses : FAIL_SCORE), 0) / games
+    ? rows.reduce((a, r) => a + penaltyScore(r), 0) / games
     : null;
   const distribution = [1, 2, 3, 4, 5, 6].map(
     (g) => rows.filter((r) => r.solved && r.guesses === g).length,
@@ -87,6 +96,23 @@ function streaks(rows: UserResultRow[]): { current: number; longest: number } {
 }
 
 /**
+ * Average opener strength: the greens and yellows the first guess reveals,
+ * averaged over the games that carry a grid. Ranges 0 to 5; higher means the
+ * opening word lands more letters. Null when no game in the set has a grid.
+ */
+export function openerStrength(rows: UserResultRow[]): number | null {
+  let hits = 0;
+  let counted = 0;
+  for (const r of rows) {
+    const first = parseStoredGrid(r.grid)?.[0];
+    if (!first) continue;
+    counted += 1;
+    for (const cell of first) if (cell === 'G' || cell === 'Y') hits += 1;
+  }
+  return counted ? hits / counted : null;
+}
+
+/**
  * Groups raw result rows into a leaderboard, ranked by average score (failed
  * games count as FAIL_SCORE), then by games played.
  */
@@ -109,7 +135,7 @@ export function aggregateLeaderboard(rows: LeaderboardRow[]): LeaderboardEntry[]
     }
     if (r.username) u.username = r.username;
     u.games += 1;
-    u.scoreSum += r.solved ? r.guesses : FAIL_SCORE;
+    u.scoreSum += penaltyScore(r);
     if (r.solved) {
       u.wins += 1;
       u.guessSum += r.guesses;
@@ -182,8 +208,8 @@ export function headToHead(rows1: UserResultRow[], rows2: UserResultRow[]): Head
     const o = other.get(r.number);
     if (!o) continue;
     common += 1;
-    const s1 = r.solved ? r.guesses : FAIL_SCORE;
-    const s2 = o.solved ? o.guesses : FAIL_SCORE;
+    const s1 = penaltyScore(r);
+    const s2 = penaltyScore(o);
     if (s1 < s2) w1 += 1;
     else if (s2 < s1) w2 += 1;
     else draw += 1;

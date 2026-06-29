@@ -9,6 +9,8 @@ import {
   lastWeekRange,
   currentNumber,
   rejectFuturePuzzles,
+  isValidISODate,
+  resolvePeriod,
 } from '../src/domain/wordle.js';
 
 test('the anchor maps puzzle 1835 to 2026-06-28', () => {
@@ -103,4 +105,49 @@ test('a month period spans the first to the last day of one month', () => {
   const [from, to] = periodRange('month', 'UTC');
   assert.ok(from.endsWith('-01'));
   assert.equal(from.slice(0, 7), to.slice(0, 7));
+});
+
+test('isValidISODate accepts real dates and rejects malformed or impossible ones', () => {
+  assert.equal(isValidISODate('2026-06-15'), true);
+  assert.equal(isValidISODate('2026-02-30'), false); // no Feb 30
+  assert.equal(isValidISODate('2026-13-01'), false); // no month 13
+  assert.equal(isValidISODate('2026-6-1'), false); // not zero-padded
+  assert.equal(isValidISODate('06/15/2026'), false);
+  assert.equal(isValidISODate('not-a-date'), false);
+});
+
+test('resolvePeriod falls back to the preset period when no custom dates are given', () => {
+  const res = resolvePeriod('week', null, null, 'UTC');
+  assert.equal(res.ok, true);
+  if (res.ok) {
+    assert.equal(res.range.label, 'This week');
+    assert.deepEqual([res.range.from, res.range.to], periodRange('week', 'UTC'));
+  }
+});
+
+test('resolvePeriod uses custom from/to bounds and overrides the dropdown', () => {
+  const res = resolvePeriod('week', '2026-06-01', '2026-06-15', 'UTC');
+  assert.equal(res.ok, true);
+  if (res.ok) {
+    assert.equal(res.range.from, '2026-06-01');
+    assert.equal(res.range.to, '2026-06-15');
+    assert.equal(res.range.label, 'Jun 1, 2026 - Jun 15, 2026');
+  }
+});
+
+test('resolvePeriod labels a single-day custom range with one date', () => {
+  const res = resolvePeriod(null, '2026-06-15', '2026-06-15', 'UTC');
+  assert.equal(res.ok, true);
+  if (res.ok) assert.equal(res.range.label, 'Jun 15, 2026');
+});
+
+test('resolvePeriod requires both custom bounds', () => {
+  assert.equal(resolvePeriod(null, '2026-06-01', null).ok, false);
+  assert.equal(resolvePeriod(null, null, '2026-06-15').ok, false);
+});
+
+test('resolvePeriod rejects invalid or reversed custom dates', () => {
+  assert.equal(resolvePeriod(null, '2026-13-01', '2026-06-15').ok, false);
+  assert.equal(resolvePeriod(null, 'June 1', '2026-06-15').ok, false);
+  assert.equal(resolvePeriod(null, '2026-06-15', '2026-06-01').ok, false);
 });
