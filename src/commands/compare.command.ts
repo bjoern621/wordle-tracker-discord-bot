@@ -65,6 +65,12 @@ export const compareCommand: BotCommand = {
     const o1 = openerStrength(shared1);
     const o2 = openerStrength(shared2);
 
+    // Games each player has that the other does not: their run beyond the
+    // shared puzzles. Counts who ranges wider than the head-to-head set rather
+    // than restating totals the shared-puzzle count already implies.
+    const extra1 = rows1.length - h.common;
+    const extra2 = rows2.length - h.common;
+
     const stats: CompareStat[] = [
       { label: 'Win rate', v1: pct(s1.winRate), v2: pct(s2.winRate), lead: higher(s1.winRate, s2.winRate) },
       { label: 'Avg score', v1: fixed(s1.avgScore), v2: fixed(s2.avgScore), lead: lower(s1.avgScore, s2.avgScore) },
@@ -72,9 +78,7 @@ export const compareCommand: BotCommand = {
       { label: 'Avg time', v1: duration(s1.avgSolveSeconds), v2: duration(s2.avgSolveSeconds), lead: lower(s1.avgSolveSeconds, s2.avgSolveSeconds) },
       { label: 'Opener', v1: openerLabel(o1), v2: openerLabel(o2), lead: higher(o1, o2) },
       { label: 'Longest streak', v1: String(s1.longest), v2: String(s2.longest), lead: higher(s1.longest, s2.longest) },
-      // Total games over the whole period (not just shared), so the card shows
-      // who plays more beyond the puzzles they have in common.
-      { label: 'Games played', v1: String(rows1.length), v2: String(rows2.length), lead: higher(rows1.length, rows2.length) },
+      { label: 'Extra games', v1: String(extra1), v2: String(extra2), lead: higher(extra1, extra2) },
     ];
 
     const png = renderComparePng({

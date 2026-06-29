@@ -211,3 +211,11 @@ test('headToHead compares only shared puzzles', () => {
   const p2 = [userRow(1, 4, true), userRow(2, 2, true), userRow(4, 1, true)];
   assert.deepEqual(headToHead(p1, p2), { common: 2, w1: 1, w2: 1, draw: 0 });
 });
+
+test('extra games count only the puzzles the other player did not play', () => {
+  const p1 = [userRow(1, 3, true), userRow(2, 5, true), userRow(3, 4, true), userRow(4, 2, true)];
+  const p2 = [userRow(3, 4, true), userRow(4, 1, true), userRow(5, 6, false)];
+  const { common } = headToHead(p1, p2);
+  assert.equal(p1.length - common, 2); // puzzles 1 and 2
+  assert.equal(p2.length - common, 1); // puzzle 5
+});
