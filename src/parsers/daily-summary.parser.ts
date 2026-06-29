@@ -79,6 +79,8 @@ class DailySummaryParser implements WordleParser {
         words: null,
         answer: null,
         hardMode: null, // the summary does not report hard mode
+        firstGuessAt: null, // the summary carries no per-guess timing
+        lastGuessAt: null,
         player: e.player,
       };
     });

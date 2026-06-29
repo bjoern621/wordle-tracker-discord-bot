@@ -5,14 +5,6 @@ monthly, weekly), per-player stats, and head-to-head comparisons. Self-hosted,
 works across every server it is invited to, PostgreSQL storage (schema via
 pgschema, queries via node-postgres).
 
-It captures results from five message sources:
-
-- **Daily summary**: the official Wordle Activity's once-a-day results post.
-- **Wordle app share**: a result shared from the official Wordle website or app.
-- **Wordle Discord bot share**: a result shared from the official Wordle Discord bot.
-- **Scoredle share text**: results posted by the third-party Scoredle game.
-- **Per-game image**: the Wordle Activity's solo "X was playing" result image.
-
 Each server picks the channel to track with `/set-channel` (admin only). The
 choice is stored per server, so the bot resumes tracking after a restart. A
 server with no channel set is ignored.
@@ -23,23 +15,23 @@ averages and streaks are computed, conflict resolution) are documented in
 
 ## How results are captured
 
-The bot reads several message sources, each recognized by its own author and
-format. The richer text sources are preferred when a message could match more
-than one:
+Five message sources, each recognized by its author and format. Ingest tries
+them in priority order and stops at the first match, preferring the richer ones:
 
-1. **Daily summary** (primary). Once a day the official Activity posts one
-   message with every player's score for the previous day:
-   `👑 4/6: <@id> <@id>` / `5/6: ...` / `X/6: ...`. The puzzle date is the day
-   before the message, resolved in the group timezone (`TIMEZONE`). Players are
-   `<@id>` mentions or plain `@nickname` text; nicknames are matched against the
-   guild member list and `PLAYER_ALIASES`.
-2. **Manual share text.** A player pastes `Wordle 1,835 4/6` (handles `.`/`,`
-   separators, `X/6` fails, `*` hard mode).
-3. **Per-game image** (optional, same-day). The Activity's solo "X was playing"
-   message; the player comes from `interactionMetadata.user`, the puzzle number
-   from the message date, and guesses and win/loss from sampling the grid image
-   (no OCR). Multi-player messages are skipped (ambiguous image). Toggle with
-   `ENABLE_ACTIVITY_IMAGE`.
+1. **Pasted `/status` text.** A player's `/status` reply from the official Wordle
+   app, pasted into the channel. The only source carrying the guessed words and
+   the answer, not just the colour grid.
+2. **Daily summary** (primary). The Activity's once-a-day post of every player's
+   score for the previous day (`4/6: <@id> …`), with a preview image packing one
+   grid per player. The puzzle date is the day before the post, in `TIMEZONE`;
+   plain `@nickname` players resolve against the member list and `PLAYER_ALIASES`.
+3. **Manual share text.** A pasted `Wordle 1,835 4/6` plus the emoji grid
+   (`X/6` fails, `*` hard mode).
+4. **Scoredle share text.** The third-party Scoredle game's post; its puzzle
+   number comes from the message timestamp.
+5. **Per-game image** (optional, same-day). The Activity's solo "X was playing"
+   grid, read by sampling the image (no OCR). Multi-player images are skipped.
+   Toggle with `ENABLE_ACTIVITY_IMAGE`.
 
 ## Storage
 
@@ -128,13 +120,17 @@ is in the Nix dev shell. Run `task --list` for the full set.
 
 | Command | Description |
 | --- | --- |
-| `/leaderboard [period]` | Ranking by average score. Period: all / month / week. |
-| `/weekly` | This week's results as a day-by-day grid, one row per player. |
-| `/stats [user] [period]` | Games, win rate, averages, streaks, distribution. |
-| `/distribution [user]` | Guess distribution histogram. |
-| `/compare <user1> [user2]` | Head-to-head over shared puzzles. |
-| `/backfill [limit]` | Re-scan the tracked channel's history (admin only). |
+| `/leaderboard [period] [from] [to]` | Player ranking. Short spans render a day-by-day grid; longer spans an aggregate card. |
+| `/history [user]` | A player's results for one month, day-by-day, with month navigation. |
+| `/stats [user] [period] [from] [to]` | Games, win rate, averages, streaks, distribution, solve time. |
+| `/compare <user1> [user2] [period] [from] [to]` | Head-to-head over shared puzzles. |
+| `/share [user] [puzzle] [format] …` | Re-post a game as an image card or the emoji block, with optional overlays (words, answer, opener, time). |
+| `/backfill [limit] [all]` | Re-scan the tracked channel's history (admin only). |
 | `/set-channel [channel]` | Choose the channel to track in this server (admin only). |
+
+`period` selects a preset range (all time, this year, this month, this week,
+last week, today; default all time); `from`/`to` (`YYYY-MM-DD`) override it with
+a custom range.
 
 Scoring: a solved game scores its number of guesses; a failed game scores 7.
 Lower average is better.
@@ -142,9 +138,9 @@ Lower average is better.
 ## Weekly report
 
 Every Monday at 00:05 in the group timezone (`TIMEZONE`), the bot posts last
-week's recap to each server's tracked channel: the same day-by-day grid as
-`/weekly`, covering the Monday-Sunday week that just ended. Servers where nobody
-played that week are skipped.
+week's leaderboard to each server's tracked channel: the day-by-day grid for the
+Monday-Sunday week that just ended, the same view a 7-day `/leaderboard`
+produces. Servers where nobody played that week are skipped.
 
 ## Inspecting the database
 

@@ -7,7 +7,9 @@
 -- score. `guess_words` and `answer` hold the actual letters: the word guessed on
 -- each row and the puzzle solution, which only a pasted /status reveals. `hard_mode`
 -- is null until a source that reports it (the manual-text sources) is seen; an image
--- or summary leaves it null rather than guessing. All four are nullable, fillable by
+-- or summary leaves it null rather than guessing. `first_guess_at`/`last_guess_at`
+-- bound the time taken to play, recoverable only from the Activity message (its
+-- creation is the first guess, each edit a later one). All are nullable, fillable by
 -- a later or earlier message. Stats are computed from these rows.
 
 CREATE TABLE results (
@@ -21,6 +23,8 @@ CREATE TABLE results (
     guess_words   text,
     answer        text,
     hard_mode     boolean,
+    first_guess_at timestamptz,
+    last_guess_at  timestamptz,
     source        text        NOT NULL,
     message_ts    timestamptz NOT NULL,
     username      text        NOT NULL,
@@ -88,7 +92,20 @@ CREATE TABLE results (
     CONSTRAINT results_solved_last_word_is_answer
         CHECK (guess_words IS NULL OR NOT solved OR jsonb_array_element_text(guess_words::jsonb, -1) = answer),
     CONSTRAINT results_unsolved_excludes_answer
-        CHECK (guess_words IS NULL OR solved OR NOT (guess_words::jsonb ? answer))
+        CHECK (guess_words IS NULL OR solved OR NOT (guess_words::jsonb ? answer)),
+
+    -- Play time is the span from the first guess to the last guess seen, both
+    -- supplied together by the Activity (its create/edit timestamps) or by neither
+    -- of the other sources. last_guess_at >= first_guess_at makes the duration a
+    -- bounded, non-negative interval: an unfinished game ends at the last guess
+    -- actually observed, never running on to "now". Timing rides with the grid that
+    -- records those guesses, so it is never stored without one.
+    CONSTRAINT results_timing_pair
+        CHECK ((first_guess_at IS NULL) = (last_guess_at IS NULL)),
+    CONSTRAINT results_timing_ordered
+        CHECK (last_guess_at IS NULL OR last_guess_at >= first_guess_at),
+    CONSTRAINT results_timing_needs_grid
+        CHECK (first_guess_at IS NULL OR grid IS NOT NULL)
 );
 
 CREATE INDEX results_guild_date_idx ON results (guild_id, puzzle_date);

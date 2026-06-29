@@ -51,6 +51,35 @@ test('a finished grid is recorded with its score and colours', async () => {
   assert.deepEqual(games[0].grid, ['YBGBB', 'BYBBG', 'GBGGG', 'GGGGG']);
 });
 
+// The message's creation is the first guess; its latest edit is the last guess, so
+// the two bound the time the player took. With no edit the span is zero.
+test('play timing spans the message creation and its latest edit', async () => {
+  stubFetch(fixture('solved-4of6-a.png'));
+  const createdAt = new Date('2026-06-24T20:00:00Z');
+  const editedAt = new Date('2026-06-24T20:04:10Z');
+  const edited = fakeMessage({
+    author: { id: OFFICIAL_WORDLE_APP_ID, username: 'Wordle' },
+    interactionUser: { id: 'player-1', username: 'eggi', globalName: 'Eggi' },
+    content: 'Eggi was playing',
+    createdAt,
+    editedAt,
+    attachments: [{ url: 'https://cdn.example/preview.png', contentType: 'image/png' }],
+  });
+  const games = await activityImageParser.parse(edited, ctx);
+  assert.ok(games && games.length === 1);
+  assert.equal(games[0].firstGuessAt?.getTime(), createdAt.getTime());
+  assert.equal(games[0].lastGuessAt?.getTime(), editedAt.getTime());
+});
+
+test('an unedited activity message has a zero-length, non-null play span', async () => {
+  stubFetch(fixture('solved-4of6-a.png'));
+  const createdAt = new Date('2026-06-24T20:00:00Z');
+  const games = await activityImageParser.parse(activityMessage(createdAt), ctx);
+  assert.ok(games && games.length === 1);
+  assert.equal(games[0].firstGuessAt?.getTime(), createdAt.getTime());
+  assert.equal(games[0].lastGuessAt?.getTime(), createdAt.getTime());
+});
+
 test('a completed failure (6 rows, no solve) is recorded as 6/false with colours', async () => {
   stubFetch(fixture('failed-6of6.png'));
   const games = await activityImageParser.parse(activityMessage(new Date(Date.now() - 5 * DAY)), ctx);

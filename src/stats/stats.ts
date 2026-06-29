@@ -25,6 +25,10 @@ export interface PlayerSummary extends GameTotals {
   longest: number;
   /** Games played in hard mode, counting grid-inferred "probably hard mode". */
   hardMode: number;
+  /** Mean solve time in seconds over solved games that carry timing; null if none. */
+  avgSolveSeconds: number | null;
+  /** Fastest solve in seconds over solved games that carry timing; null if none. */
+  fastestSolveSeconds: number | null;
 }
 
 export interface LeaderboardEntry extends GameTotals {
@@ -78,6 +82,27 @@ export function summarize(rows: UserResultRow[]): PlayerSummary {
     ),
     hardMode: rows.filter(effectiveHardMode).length,
     ...streaks(rows),
+    ...solveTimes(rows),
+  };
+}
+
+/**
+ * Time-to-solve figures over the solved games that carry timing. Only the Activity
+ * reveals play time, so games from other sources contribute nothing here. Both are
+ * null when no solved game in the set was timed. Unfinished games are excluded: they
+ * are losses, and their duration measures an abandoned attempt, not a solve.
+ */
+function solveTimes(rows: UserResultRow[]): {
+  avgSolveSeconds: number | null;
+  fastestSolveSeconds: number | null;
+} {
+  const times = rows
+    .filter((r) => r.solved && r.durationSeconds !== null)
+    .map((r) => r.durationSeconds as number);
+  if (!times.length) return { avgSolveSeconds: null, fastestSolveSeconds: null };
+  return {
+    avgSolveSeconds: times.reduce((a, b) => a + b, 0) / times.length,
+    fastestSolveSeconds: Math.min(...times),
   };
 }
 

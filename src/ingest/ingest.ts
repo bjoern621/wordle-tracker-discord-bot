@@ -47,6 +47,8 @@ async function storeGames(
       words: game.words ? JSON.stringify(game.words) : null,
       answer: game.answer,
       hardMode: game.hardMode,
+      firstGuessAt: game.firstGuessAt,
+      lastGuessAt: game.lastGuessAt,
       source,
       messageTs: ts,
       username: who.name,

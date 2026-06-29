@@ -7,6 +7,12 @@ import type { ResultSource } from '../types.js';
 
 export type RecordStatus = 'inserted' | 'updated' | 'unchanged' | 'stale';
 
+/** Two nullable timestamps name the same instant (both null counts as same). */
+function sameInstant(a: Date | null, b: Date | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.getTime() === b.getTime();
+}
+
 /**
  * A game to persist. `grid`, `words`, `answer` and `hardMode` are null when the
  * source does not carry them (only a pasted /status reveals the words and answer,
@@ -24,6 +30,9 @@ export interface ResultRecord {
   words: string | null;
   answer: string | null;
   hardMode: boolean | null;
+  /** First/last guess timestamps, both null unless the Activity supplied them. */
+  firstGuessAt: Date | null;
+  lastGuessAt: Date | null;
   source: ResultSource;
   messageTs: Date;
   username: string;
@@ -38,6 +47,8 @@ export interface ExistingRow {
   words: string | null;
   answer: string | null;
   hard_mode: boolean | null;
+  first_guess_at: Date | null;
+  last_guess_at: Date | null;
   message_ts: Date;
 }
 
@@ -58,6 +69,8 @@ export type MergeAction =
       words: string | null;
       answer: string | null;
       hardMode: boolean | null;
+      firstGuessAt: Date | null;
+      lastGuessAt: Date | null;
       status: RecordStatus;
     }
   | {
@@ -67,6 +80,8 @@ export type MergeAction =
       words: string | null;
       answer: string | null;
       hardMode: boolean | null;
+      firstGuessAt: Date | null;
+      lastGuessAt: Date | null;
       status: 'updated';
     }
   | { kind: 'skip'; status: 'stale' };
@@ -96,6 +111,11 @@ export type MergeAction =
  *       - hard mode: null until a source that reports it (the manual-text sources)
  *         is seen. A non-reporting message leaves hard mode null and never
  *         overwrites a reported value; the newest reporting message wins it.
+ *       - play time: the first/last guess timestamps, supplied only by the Activity.
+ *         They ride with the grid those guesses produced: kept while that grid is,
+ *         advanced when an edit re-shares a later grid, and dropped when a corrected
+ *         outcome drops the grid, so a finished game never keeps the partial game's
+ *         duration. A source without timing never erases it.
  *
  * Every field therefore resolves to the value from the newest message that
  * carries one, independent of arrival order, so live ingestion (oldest first) and
@@ -115,6 +135,8 @@ export function planResultWrite(existing: ExistingRow | undefined, r: ResultReco
       words: r.words,
       answer: r.answer,
       hardMode: r.hardMode,
+      firstGuessAt: r.firstGuessAt,
+      lastGuessAt: r.lastGuessAt,
       status: 'inserted',
     };
   }
@@ -129,7 +151,8 @@ export function planResultWrite(existing: ExistingRow | undefined, r: ResultReco
     let guesses = r.guesses;
     let grid = r.grid;
     let words = r.words;
-    if (!grid && existing.grid && existing.solved === r.solved) {
+    const keptStoredGrid = !grid && !!existing.grid && existing.solved === r.solved;
+    if (keptStoredGrid) {
       guesses = existing.guesses;
       grid = existing.grid;
       words = existing.words;
@@ -138,16 +161,36 @@ export function planResultWrite(existing: ExistingRow | undefined, r: ResultReco
     }
     const answer = r.answer ?? existing.answer;
     const hardMode = r.hardMode ?? existing.hard_mode;
+    // Timing rides with the grid that records the guesses. When the resolved grid is
+    // the same play the row already held, keep its timing unless this message brings
+    // its own (an Activity edit advances last_guess_at); a re-share without timing
+    // never erases it. When the grid changed or was dropped, the timing is whatever
+    // this message carried for it, so a corrected outcome leaves no stale duration.
+    const sameGrid = grid !== null && grid === existing.grid && existing.solved === r.solved;
+    let firstGuessAt: Date | null;
+    let lastGuessAt: Date | null;
+    if (keptStoredGrid) {
+      firstGuessAt = existing.first_guess_at;
+      lastGuessAt = existing.last_guess_at;
+    } else if (sameGrid) {
+      firstGuessAt = r.firstGuessAt ?? existing.first_guess_at;
+      lastGuessAt = r.lastGuessAt ?? existing.last_guess_at;
+    } else {
+      firstGuessAt = r.firstGuessAt;
+      lastGuessAt = r.lastGuessAt;
+    }
     const status: RecordStatus =
       existing.guesses !== guesses ||
       existing.solved !== r.solved ||
       existing.grid !== grid ||
       existing.words !== words ||
       existing.answer !== answer ||
-      existing.hard_mode !== hardMode
+      existing.hard_mode !== hardMode ||
+      !sameInstant(existing.first_guess_at, firstGuessAt) ||
+      !sameInstant(existing.last_guess_at, lastGuessAt)
         ? 'updated'
         : 'unchanged';
-    return { kind: 'upsert', guesses, grid, words, answer, hardMode, status };
+    return { kind: 'upsert', guesses, grid, words, answer, hardMode, firstGuessAt, lastGuessAt, status };
   }
 
   // Older than what is stored: it cannot change the outcome or provenance, but it
@@ -162,11 +205,15 @@ export function planResultWrite(existing: ExistingRow | undefined, r: ResultReco
   let words = existing.words;
   let answer = existing.answer;
   let hardMode = existing.hard_mode;
+  let firstGuessAt = existing.first_guess_at;
+  let lastGuessAt = existing.last_guess_at;
   let changed = false;
   if (r.grid && !existing.grid && existing.solved === r.solved) {
     guesses = r.guesses;
     grid = r.grid;
     words = r.words;
+    firstGuessAt = r.firstGuessAt;
+    lastGuessAt = r.lastGuessAt;
     changed = true;
   } else if (r.words && !existing.words && r.grid === existing.grid && existing.solved === r.solved) {
     words = r.words;
@@ -180,6 +227,13 @@ export function planResultWrite(existing: ExistingRow | undefined, r: ResultReco
     hardMode = r.hardMode;
     changed = true;
   }
+  // An older Activity image can fill timing onto a row whose grid for the same play
+  // came from elsewhere (so backfill and live order converge on the same duration).
+  if (existing.first_guess_at === null && r.firstGuessAt !== null && grid !== null && r.grid === grid && existing.solved === r.solved) {
+    firstGuessAt = r.firstGuessAt;
+    lastGuessAt = r.lastGuessAt;
+    changed = true;
+  }
   if (!changed) return { kind: 'skip', status: 'stale' };
-  return { kind: 'enrich', guesses, grid, words, answer, hardMode, status: 'updated' };
+  return { kind: 'enrich', guesses, grid, words, answer, hardMode, firstGuessAt, lastGuessAt, status: 'updated' };
 }

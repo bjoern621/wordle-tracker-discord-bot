@@ -45,6 +45,15 @@ export interface ParsedGame {
   answer: string | null;
   /** Hard mode flag, or null when the source does not report it. */
   hardMode: boolean | null;
+  /**
+   * When the first guess was made and when the last one seen was, bounding the
+   * time taken to play. Only the Activity reveals them (message creation is the
+   * first guess, each edit a later one); every other source carries null for both.
+   * An unfinished game's `lastGuessAt` is the last guess actually observed, so its
+   * duration stops there rather than growing toward the present.
+   */
+  firstGuessAt: Date | null;
+  lastGuessAt: Date | null;
   player: PlayerRef;
 }
 

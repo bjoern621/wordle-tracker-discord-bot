@@ -2,7 +2,7 @@ import { AttachmentBuilder, SlashCommandBuilder, type ChatInputCommandInteractio
 import type { BotCommand } from './command.js';
 import { getUserResults } from '../db/results.repository.js';
 import { summarize } from '../stats/stats.js';
-import { pct, fixed } from '../stats/format.js';
+import { pct, fixed, duration } from '../stats/format.js';
 import { renderStatsPng, type StatTile, type StatBar } from '../render/stats-image.js';
 import { greenFor, FAILED } from '../render/theme.js';
 import { config } from '../config/index.js';
@@ -36,6 +36,8 @@ export const statsCommand: BotCommand = {
       { label: 'Current streak', value: String(s.current) },
       { label: 'Longest streak', value: String(s.longest) },
       { label: 'Hard mode', value: `${pct(s.hardMode / s.games)} (${s.hardMode})` },
+      { label: 'Avg solve time', value: duration(s.avgSolveSeconds) },
+      { label: 'Fastest solve', value: duration(s.fastestSolveSeconds) },
     ];
 
     const bars: StatBar[] = s.distribution.map((count, i) => ({

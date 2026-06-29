@@ -46,7 +46,9 @@ numbers and the gap ends the run.
 
 An unfinished game is recorded the moment its partial grid is seen, then corrected
 if the player returns to finish it. The partial grid is stored with the loss: one
-row per guess played so far, and no winning row. The correction relies on conflict
+row per guess played so far, and no winning row. Its play time (see below) is bounded
+at the last guess seen, so an abandoned game has a finite duration rather than one that
+grows with time. The correction relies on conflict
 resolution below: the Activity edits its own message as the player guesses, and
 each edit re-ingests with a newer timestamp, so the finished state overrides the
 stored failure and its complete grid replaces the partial one.
@@ -80,6 +82,32 @@ The per-game scoring rule lives in exactly one function, `penaltyScore` in
 [src/stats/stats.ts](../src/stats/stats.ts), so every average, ranking, and
 head-to-head comparison scores a game the same way. `FAIL_SCORE` is defined in
 [src/constants.ts](../src/constants.ts).
+
+## Play time
+
+Each game can carry the time it took to play: `first_guess_at` and `last_guess_at`,
+the span from the first guess to the last guess seen. Only the Activity reveals it.
+The Activity posts its message on the first guess and edits it on each later guess,
+so the message's creation time is the first guess and its latest edit the last. Every
+other source (summary, share text, scoredle, /status) carries no timing and leaves
+both columns null.
+
+An unfinished game ends at the last guess actually observed. `last_guess_at` is the
+Activity's latest edit, never the present, so an abandoned game's duration is a fixed
+interval up to the guess where the player stopped, not a clock that keeps running. The
+schema enforces this: `last_guess_at >= first_guess_at`, and the two are always set or
+cleared together.
+
+Timing rides with the grid those guesses produced. It is kept while that grid is kept,
+advanced when an edit re-shares a later grid, and dropped when a corrected outcome drops
+the grid, so a game that is finished off-Activity (corrected by the next-day summary)
+never keeps the abandoned attempt's duration. The merge rule is in
+[src/db/results-merge.ts](../src/db/results-merge.ts).
+
+`/stats` reports the average and fastest solve time over the solved games that carry
+timing. Unfinished games are stored with their bounded duration but excluded from these
+figures: a loss measures an abandoned attempt, not a solve. See `solveTimes` in
+[src/stats/stats.ts](../src/stats/stats.ts).
 
 ## Streaks
 

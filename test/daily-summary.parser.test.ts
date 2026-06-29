@@ -50,6 +50,8 @@ test('scores and solved flag are read per line', async () => {
     words: null,
     answer: null,
     hardMode: null,
+    firstGuessAt: null,
+    lastGuessAt: null,
     player: { kind: 'participant', id: '111' },
   });
   assert.equal(byId(games, '444')?.guesses, 6);
@@ -69,6 +71,8 @@ test('plain @names become unresolved participants', async () => {
     words: null,
     answer: null,
     hardMode: null,
+    firstGuessAt: null,
+    lastGuessAt: null,
     player: { kind: 'participant', name: 'Tim' },
   });
 });

@@ -72,6 +72,8 @@ class StatusTextParser implements WordleParser {
         words: rows.map((row) => row.word),
         answer: answerMatch[1].toLowerCase(),
         hardMode: header[3] === '*',
+        firstGuessAt: null,
+        lastGuessAt: null,
         player: { kind: 'known', user: { id: author.id, name: author.globalName || author.username } },
       },
     ];

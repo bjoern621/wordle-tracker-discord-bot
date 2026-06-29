@@ -37,6 +37,13 @@ class ActivityImageParser implements WordleParser {
     const number = numberForTimestamp(message.createdAt, ctx.timeZone, 0);
     const who = { kind: 'known' as const, user: { id: player.id, name: player.globalName || player.username } };
 
+    // The Activity posts the message on the first guess and edits it on each later
+    // one, so its creation is the first guess and its latest edit the last guess
+    // seen. For an unfinished game that last edit is the final guess actually played,
+    // so the duration stops there instead of growing toward now.
+    const firstGuessAt = message.createdAt;
+    const lastGuessAt = message.editedAt ?? message.createdAt;
+
     // Every state the image shows is stored with its colour grid, the unfinished
     // game included. An in-progress grid (fewer than six rows, no winning row) is
     // recorded right away as a not-yet-solved loss, on any day: it breaks the
@@ -58,6 +65,8 @@ class ActivityImageParser implements WordleParser {
         grid: grid.patterns,
         words: null,
         answer: null,
+        firstGuessAt,
+        lastGuessAt,
         player: who,
       },
     ];

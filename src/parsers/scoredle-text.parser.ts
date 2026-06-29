@@ -33,6 +33,8 @@ class ScoredleTextParser implements WordleParser {
         grid: parseEmojiGrid(message.content),
         words: null,
         answer: null,
+        firstGuessAt: null,
+        lastGuessAt: null,
         player: { kind: 'known', user: { id: author.id, name: author.globalName || author.username } },
       },
     ];

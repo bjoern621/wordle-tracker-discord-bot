@@ -32,6 +32,12 @@ export interface UserResultRow {
   /** The puzzle answer, or null unless a /status filled it. */
   answer: string | null;
   hardMode: boolean | null;
+  /**
+   * Seconds from the first guess to the last guess seen, or null when no source
+   * supplied timing. For an unfinished game this is the span up to the last guess
+   * observed, so it is finite rather than open-ended.
+   */
+  durationSeconds: number | null;
   source: ResultSource;
 }
 
@@ -50,7 +56,8 @@ export async function recordResult(r: ResultRecord): Promise<RecordStatus> {
   try {
     await client.query('BEGIN');
     const { rows } = await client.query<ExistingRow>(
-      `SELECT guesses, solved, grid, guess_words AS words, answer, hard_mode, message_ts
+      `SELECT guesses, solved, grid, guess_words AS words, answer, hard_mode,
+              first_guess_at, last_guess_at, message_ts
          FROM results
         WHERE guild_id = $1 AND user_id = $2 AND puzzle_number = $3
         FOR UPDATE`,
@@ -66,9 +73,10 @@ export async function recordResult(r: ResultRecord): Promise<RecordStatus> {
     if (plan.kind === 'enrich') {
       await client.query(
         `UPDATE results
-            SET guesses = $4, grid = $5, guess_words = $6, answer = $7, hard_mode = $8, updated_at = now()
+            SET guesses = $4, grid = $5, guess_words = $6, answer = $7, hard_mode = $8,
+                first_guess_at = $9, last_guess_at = $10, updated_at = now()
           WHERE guild_id = $1 AND user_id = $2 AND puzzle_number = $3`,
-        [r.guildId, r.userId, r.puzzleNumber, plan.guesses, plan.grid, plan.words, plan.answer, plan.hardMode],
+        [r.guildId, r.userId, r.puzzleNumber, plan.guesses, plan.grid, plan.words, plan.answer, plan.hardMode, plan.firstGuessAt, plan.lastGuessAt],
       );
       await client.query('COMMIT');
       return plan.status;
@@ -76,22 +84,24 @@ export async function recordResult(r: ResultRecord): Promise<RecordStatus> {
 
     await client.query(
       `INSERT INTO results
-         (guild_id, user_id, puzzle_number, puzzle_date, guesses, solved, grid, guess_words, answer, hard_mode, source, message_ts, username, message_id, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())
+         (guild_id, user_id, puzzle_number, puzzle_date, guesses, solved, grid, guess_words, answer, hard_mode, first_guess_at, last_guess_at, source, message_ts, username, message_id, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, now())
        ON CONFLICT (guild_id, user_id, puzzle_number) DO UPDATE SET
-         puzzle_date = excluded.puzzle_date,
-         guesses     = excluded.guesses,
-         solved      = excluded.solved,
-         grid        = excluded.grid,
-         guess_words = excluded.guess_words,
-         answer      = excluded.answer,
-         hard_mode   = excluded.hard_mode,
-         source      = excluded.source,
-         message_ts  = excluded.message_ts,
-         username    = excluded.username,
-         message_id  = excluded.message_id,
-         updated_at  = now()`,
-      [r.guildId, r.userId, r.puzzleNumber, r.puzzleDate, plan.guesses, r.solved, plan.grid, plan.words, plan.answer, plan.hardMode, r.source, r.messageTs, r.username, r.messageId],
+         puzzle_date    = excluded.puzzle_date,
+         guesses        = excluded.guesses,
+         solved         = excluded.solved,
+         grid           = excluded.grid,
+         guess_words    = excluded.guess_words,
+         answer         = excluded.answer,
+         hard_mode      = excluded.hard_mode,
+         first_guess_at = excluded.first_guess_at,
+         last_guess_at  = excluded.last_guess_at,
+         source         = excluded.source,
+         message_ts     = excluded.message_ts,
+         username       = excluded.username,
+         message_id     = excluded.message_id,
+         updated_at     = now()`,
+      [r.guildId, r.userId, r.puzzleNumber, r.puzzleDate, plan.guesses, r.solved, plan.grid, plan.words, plan.answer, plan.hardMode, plan.firstGuessAt, plan.lastGuessAt, r.source, r.messageTs, r.username, r.messageId],
     );
 
     await client.query('COMMIT');
@@ -133,11 +143,51 @@ export async function getUserResults(
 ): Promise<UserResultRow[]> {
   const { rows } = await pool.query<UserResultRow>(
     `SELECT puzzle_number AS number, puzzle_date AS date, guesses, solved, grid,
-            guess_words AS words, answer, hard_mode AS "hardMode", source
+            guess_words AS words, answer, hard_mode AS "hardMode",
+            EXTRACT(EPOCH FROM (last_guess_at - first_guess_at))::int AS "durationSeconds",
+            source
        FROM results
       WHERE guild_id = $1 AND user_id = $2 AND puzzle_date BETWEEN $3 AND $4
       ORDER BY puzzle_number ASC`,
     [guildId, userId, from, to],
   );
   return rows;
+}
+
+// The UserResultRow projection, shared by the single-game getters below so they
+// stay in step with getUserResults above.
+const USER_GAME_COLUMNS = `puzzle_number AS number, puzzle_date AS date, guesses, solved, grid,
+            guess_words AS words, answer, hard_mode AS "hardMode",
+            EXTRACT(EPOCH FROM (last_guess_at - first_guess_at))::int AS "durationSeconds",
+            source`;
+
+/** One player's game for a single puzzle, or null when they did not play it. */
+export async function getUserGame(
+  guildId: string,
+  userId: string,
+  puzzleNumber: number,
+): Promise<UserResultRow | null> {
+  const { rows } = await pool.query<UserResultRow>(
+    `SELECT ${USER_GAME_COLUMNS}
+       FROM results
+      WHERE guild_id = $1 AND user_id = $2 AND puzzle_number = $3`,
+    [guildId, userId, puzzleNumber],
+  );
+  return rows[0] ?? null;
+}
+
+/** One player's most recent game by puzzle number, or null when they have none. */
+export async function getLatestUserGame(
+  guildId: string,
+  userId: string,
+): Promise<UserResultRow | null> {
+  const { rows } = await pool.query<UserResultRow>(
+    `SELECT ${USER_GAME_COLUMNS}
+       FROM results
+      WHERE guild_id = $1 AND user_id = $2
+      ORDER BY puzzle_number DESC
+      LIMIT 1`,
+    [guildId, userId],
+  );
+  return rows[0] ?? null;
 }

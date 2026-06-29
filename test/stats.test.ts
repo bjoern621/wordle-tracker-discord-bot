@@ -10,7 +10,19 @@ function userRow(
   solved: boolean,
   extra: Partial<UserResultRow> = {},
 ): UserResultRow {
-  return { number, date: numberToDate(number), guesses, solved, grid: null, hardMode: null, source: 'summary', ...extra };
+  return {
+    number,
+    date: numberToDate(number),
+    guesses,
+    solved,
+    grid: null,
+    words: null,
+    answer: null,
+    hardMode: null,
+    durationSeconds: null,
+    source: 'summary',
+    ...extra,
+  };
 }
 const numberToDate = (n: number) => `2026-01-${String(n).padStart(2, '0')}`;
 
@@ -86,6 +98,27 @@ test('summarize handles an all-empty history', () => {
   assert.equal(s.games, 0);
   assert.equal(s.avgScore, null);
   assert.equal(s.current, 0);
+  assert.equal(s.avgSolveSeconds, null);
+  assert.equal(s.fastestSolveSeconds, null);
+});
+
+// Solve time averages only the solved games that carry timing. A loss with timing
+// (an abandoned game) is excluded, and a game with no timing contributes nothing.
+test('summarize averages solve time over timed wins only', () => {
+  const s = summarize([
+    userRow(1, 3, true, { durationSeconds: 120 }),
+    userRow(2, 4, true, { durationSeconds: 60 }),
+    userRow(3, 2, false, { durationSeconds: 30 }), // abandoned: excluded
+    userRow(4, 5, true), // solved but untimed: excluded
+  ]);
+  assert.equal(s.avgSolveSeconds, 90); // (120 + 60) / 2
+  assert.equal(s.fastestSolveSeconds, 60);
+});
+
+test('summarize reports null solve time when no win is timed', () => {
+  const s = summarize([userRow(1, 3, true), userRow(2, 6, false, { durationSeconds: 200 })]);
+  assert.equal(s.avgSolveSeconds, null);
+  assert.equal(s.fastestSolveSeconds, null);
 });
 
 test('aggregateLeaderboard ranks by average score then games', () => {

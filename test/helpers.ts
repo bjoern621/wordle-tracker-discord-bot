@@ -21,6 +21,8 @@ export interface FakeMessageInit {
   content?: string;
   author?: FakeAuthor | null;
   createdAt?: Date;
+  /** Latest edit time; the activity parser reads it as the last guess seen. */
+  editedAt?: Date | null;
   /** When set, exposed as interactionMetadata.user (the activity player). */
   interactionUser?: FakeAuthor;
   /** Image attachments the activity-image parser fetches. */
@@ -36,7 +38,7 @@ export function fakeMessage(init: FakeMessageInit = {}): Message {
     content: init.content ?? '',
     author: author ? { globalName: null, bot: false, system: false, ...author } : null,
     createdAt: init.createdAt ?? new Date('2026-06-28T12:00:00Z'),
-    editedAt: null,
+    editedAt: init.editedAt ?? null,
     interactionMetadata: init.interactionUser
       ? { user: { globalName: null, ...init.interactionUser } }
       : null,

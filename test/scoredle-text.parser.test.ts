@@ -53,6 +53,8 @@ test('solved hard-mode game, counts stripped from the grid', async () => {
     grid: ['BYBBB', 'BBYBB', 'BBBGG', 'BGBGG', 'GGGGG'],
     words: null,
     answer: null,
+    firstGuessAt: null,
+    lastGuessAt: null,
     player: { kind: 'known', user: { id: 'u99', name: 'Eggi' } },
   });
 });

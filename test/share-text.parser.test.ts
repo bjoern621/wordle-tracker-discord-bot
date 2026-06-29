@@ -26,6 +26,8 @@ test('official NYT website export (comma thousands separator)', async () => {
     grid: ['BBBYB', 'YBBBB', 'GGBGB', 'GGGGG'],
     words: null,
     answer: null,
+    firstGuessAt: null,
+    lastGuessAt: null,
     player: { kind: 'known', user: { id: 'u42', name: 'Sara' } },
   });
 });

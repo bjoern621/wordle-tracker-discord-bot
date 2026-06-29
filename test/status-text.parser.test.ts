@@ -39,6 +39,8 @@ test('reads the words, answer, grid, score and hard mode of a failed game', asyn
     words: ['zilch', 'wussy', 'pussy', 'tossy', 'brown', 'drown'],
     answer: 'crude',
     hardMode: true,
+    firstGuessAt: null,
+    lastGuessAt: null,
     player: { kind: 'known', user: { id: 'u42', name: 'Sara' } },
   });
 });
