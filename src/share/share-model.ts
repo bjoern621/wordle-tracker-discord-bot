@@ -120,6 +120,14 @@ export function buildShareView(row: UserResultRow, playerName: string, opts: Sha
     else notes.push('No timing was recorded for this game.');
   }
 
+  const answerLabel = opts.answer && answer ? answer.toUpperCase() : null;
+
+  // Guessed words, candidates-left, the next guess, and the answer all give the
+  // puzzle away to anyone who has not played yet, so the share is wrapped in a
+  // spoiler whenever one of them is actually shown (not merely requested).
+  const revealsSolution =
+    rows.some((r) => r.word != null || r.wordsLeft != null) || nextGuess != null || answerLabel != null;
+
   return {
     numberLabel: new Intl.NumberFormat('en-US').format(row.number),
     score: row.solved ? `${row.guesses}/6` : 'X/6',
@@ -128,10 +136,10 @@ export function buildShareView(row: UserResultRow, playerName: string, opts: Sha
     rows,
     hardMode: opts.hardMode && row.hardMode === true,
     nextGuess,
-    answer: opts.answer && answer ? answer.toUpperCase() : null,
+    answer: answerLabel,
     opener,
     time,
     notes,
-    spoiler: opts.spoiler,
+    spoiler: opts.spoiler || revealsSolution,
   };
 }

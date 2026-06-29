@@ -67,6 +67,10 @@ async function storeGames(
  * /set-channel) are considered; a guild with no channel is ignored. Keyed
  * (guild, user, puzzle), so results never double-count; the most recent message
  * wins on conflict.
+ *
+ * Stores only: it never edits or deletes the source message. Backfill reuses this
+ * to re-scan history, so any message side effect (like removing a /status paste)
+ * belongs in the live MessageCreate handler, not here.
  */
 export async function ingestMessage(message: Message): Promise<IngestOutcome | null> {
   const guildId = message.guildId;

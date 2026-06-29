@@ -117,3 +117,26 @@ test('spoiler wraps the grid but leaves the header visible', () => {
   assert.match(text, /^Wordle 1,835 4\/6\n/); // header outside
   assert.ok(text.includes('||')); // grid wrapped
 });
+
+test('showing the guessed words auto-marks the share as a spoiler', () => {
+  const view = buildShareView(statusRow(), 'Sara', { ...OFF, words: true });
+  assert.equal(view.spoiler, true);
+  assert.ok(buildShareText(view).includes('||'));
+});
+
+test('showing candidates-left, next guess, or the answer auto-spoilers too', () => {
+  for (const over of [{ wordsLeft: true }, { nextGuess: true }, { answer: true }]) {
+    const view = buildShareView(statusRow(), 'Sara', { ...OFF, ...over });
+    assert.equal(view.spoiler, true);
+  }
+});
+
+test('overlays that do not reveal the answer leave the share unspoiled', () => {
+  const view = buildShareView(statusRow(), 'Sara', { ...OFF, opener: true, time: true });
+  assert.equal(view.spoiler, false);
+});
+
+test('requesting words on a colour-only game does not spoiler an empty overlay', () => {
+  const view = buildShareView(imageRow(), 'Sara', { ...OFF, words: true, wordsLeft: true });
+  assert.equal(view.spoiler, false);
+});

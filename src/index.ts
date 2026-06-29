@@ -87,6 +87,10 @@ client.on(Events.MessageCreate, async (message) => {
     // A pasted /status names the answer word, so leaving it in the channel spoils
     // the puzzle for everyone else. Once the result is recorded, delete it. Needs
     // the Manage Messages permission; a failure is logged, not fatal.
+    //
+    // Deletion belongs here in the live-message handler, not in ingestMessage:
+    // backfill reuses ingestMessage to re-scan history and must never delete
+    // anything. Keep the delete out of the shared core so that guarantee holds.
     if (outcome?.source === 'status') {
       await message.delete().catch((err) => {
         console.warn(`Could not delete /status message ${message.id}:`, errMessage(err));

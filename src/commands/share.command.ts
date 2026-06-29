@@ -5,15 +5,17 @@ import { buildShareView, type ShareOptions } from '../share/share-model.js';
 import { buildShareText } from '../share/share-text.js';
 import { renderSharePng } from '../render/share-image.js';
 
-// Reads the overlay toggles. Hard mode shows by default; everything else is off
-// unless asked for, so a bare /share is just the number and the grid.
+// Reads the overlay toggles. Hard mode, the guessed words, and the candidates
+// left show by default; the rest are off unless asked for. Showing the words or
+// candidates gives the answer away, so a bare /share is spoiler-wrapped (see
+// buildShareView).
 function readOptions(interaction: ChatInputCommandInteraction): ShareOptions {
   const flag = (name: string, fallback = false) => interaction.options.getBoolean(name) ?? fallback;
   const format = interaction.options.getString('format') === 'text' ? 'text' : 'image';
   return {
     format,
-    words: flag('words'),
-    wordsLeft: flag('words_left'),
+    words: flag('words', true),
+    wordsLeft: flag('words_left', true),
     nextGuess: flag('next_guess'),
     answer: flag('answer'),
     opener: flag('opener'),
@@ -38,9 +40,11 @@ export const shareCommand: BotCommand = {
         .setDescription('How to render it (default: image)')
         .addChoices({ name: 'Image', value: 'image' }, { name: 'Text', value: 'text' }),
     )
-    .addBooleanOption((o) => o.setName('words').setDescription('Show the guessed words (needs /status)'))
     .addBooleanOption((o) =>
-      o.setName('words_left').setDescription('Show candidates remaining per row (needs /status)'),
+      o.setName('words').setDescription('Show the guessed words (default: on, needs /status)'),
+    )
+    .addBooleanOption((o) =>
+      o.setName('words_left').setDescription('Show candidates remaining per row (default: on, needs /status)'),
     )
     .addBooleanOption((o) =>
       o.setName('next_guess').setDescription("Show the solver's best next guess (needs /status)"),
@@ -51,7 +55,9 @@ export const shareCommand: BotCommand = {
     )
     .addBooleanOption((o) => o.setName('time').setDescription('Show how long the game took, when known'))
     .addBooleanOption((o) => o.setName('hard_mode').setDescription('Show the hard-mode badge (default: on)'))
-    .addBooleanOption((o) => o.setName('spoiler').setDescription('Text format: hide the grid behind a spoiler')),
+    .addBooleanOption((o) =>
+      o.setName('spoiler').setDescription('Hide behind a spoiler (auto-on when words or the answer show)'),
+    ),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const user = interaction.options.getUser('user') || interaction.user;
@@ -80,6 +86,7 @@ export const shareCommand: BotCommand = {
       return;
     }
     const file = new AttachmentBuilder(renderSharePng(view), { name: 'share.png' });
+    file.setSpoiler(view.spoiler);
     await interaction.editReply({ files: [file] });
   },
 };
