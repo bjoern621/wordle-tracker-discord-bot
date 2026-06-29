@@ -11,9 +11,6 @@ import { renderWeeklyPng, type WeeklyImageRow } from '../render/weekly-image.js'
 import { renderRankingPng, type RankingRow } from '../render/ranking-image.js';
 import type { Period } from '../types.js';
 
-/** Legend shown alongside the day-by-day grid so the shading is self-explanatory. */
-export const GRID_LEGEND = 'Red = failed.';
-
 /** Periods rendered as a day-by-day grid rather than an aggregate card. */
 const GRID_PERIODS: ReadonlySet<Period> = new Set<Period>(['day', 'week']);
 
@@ -83,8 +80,7 @@ async function buildGrid(
 
   const png = renderWeeklyPng({ title: 'Wordle Leaderboard', span, columns, rows: imageRows });
   const file = new AttachmentBuilder(png, { name: 'leaderboard.png' });
-  const content = heading ? `${heading}\n${GRID_LEGEND}` : GRID_LEGEND;
-  return { content, files: [file] };
+  return { content: heading, files: [file] };
 }
 
 // Ranked card: aggregate figures per player for the whole range.
