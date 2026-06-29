@@ -38,14 +38,17 @@ class ActivityImageParser implements WordleParser {
     const who = { kind: 'known' as const, user: { id: player.id, name: player.globalName || player.username } };
 
     // An unfinished grid is recorded immediately as a failure, on any day: a game
-    // in progress counts as not-yet-solved and breaks the streak. If the player
-    // comes back and finishes, the Activity edits its message; that edit re-ingests
-    // with a newer timestamp and overrides this row with the real score
-    // (planResultWrite: most recent message wins). The next-day summary is a second
-    // correction path when the edit is missed. The partial grid is dropped so it
-    // cannot be borrowed onto a row a later summary marks solved.
+    // in progress counts as not-yet-solved and breaks the streak. The stored guess
+    // count is the rows actually played so far (1-5, since a sixth row is a
+    // terminal failure, not an unfinished game); solved is false, so the game
+    // scores FAIL_SCORE regardless of that count. If the player comes back and
+    // finishes, the Activity edits its message; that edit re-ingests with a newer
+    // timestamp and overrides this row with the real score (planResultWrite: most
+    // recent message wins). The next-day summary is a second correction path when
+    // the edit is missed. The partial grid is dropped so it cannot be borrowed onto
+    // a row a later summary marks solved.
     if (!grid.complete) {
-      return [{ number, guesses: 6, solved: false, hardMode: null, grid: null, player: who }];
+      return [{ number, guesses: grid.guesses, solved: false, hardMode: null, grid: null, player: who }];
     }
 
     return [

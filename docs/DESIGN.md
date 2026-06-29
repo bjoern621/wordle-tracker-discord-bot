@@ -24,14 +24,17 @@ A game is in one of four states. Only the first three have a stored row.
 | --------------------------------------- | ---------- | -------------------- | ---------------- | -------------------- | ------------ |
 | **Win**                                 | yes        | 1-6 / `true`         | yes              | the guess count      | extends      |
 | **Failed** (6 guesses, no solve)        | yes        | `6` / `false`        | yes              | `FAIL_SCORE` (7)     | breaks       |
-| **Unfinished** (in progress, abandoned) | yes        | `6` / `false`        | yes              | `FAIL_SCORE` (7)     | breaks       |
+| **Unfinished** (in progress, abandoned) | yes        | `1-5` / `false`      | yes              | `FAIL_SCORE` (7)     | breaks       |
 | **Not played**                          | no         | n/a                  | no               | none                 | breaks (gap) |
 
-A **failed** game and an **unfinished** game are stored identically: both are
-recorded as `guesses = 6, solved = false`, so both score as `FAIL_SCORE` and both
-break the streak. The distinction is only in how they arrive, not in how they
-count. A failed game is a completed `X/6`; an unfinished game is a grid with fewer
-than six rows and no winning row, recorded as a failure on sight.
+A **failed** game and an **unfinished** game both have `solved = false`, so both
+score as `FAIL_SCORE` and both break the streak. They differ only in the stored
+guess count. A failed game is a completed `X/6`, recorded as `guesses = 6`. An
+unfinished game is a grid with fewer than six rows and no winning row, recorded
+with the number of rows actually played (1-5); a sixth row would make the grid
+terminal, which is the failed case, not the unfinished one. Because the game is
+unsolved, that guess count never reaches an average or distribution. It scores
+`FAIL_SCORE` like any loss, surfacing only as the rows drawn on the partial grid.
 
 A **not played** day has no row at all. It is excluded from games, wins, and the
 average. It is not a failure. The only place it surfaces is the weekly grid, which
@@ -51,7 +54,7 @@ failure.
 guess 3, abandoned     finish on guess 5        (player never returns)
         │                       │                        │
         ▼                       ▼                        ▼
-  store 6/false           edit re-ingests          row stays 6/false
+  store 3/false           edit re-ingests          row stays 3/false
   (counts as fail)        store 5/true             (correct: it was a loss)
                           (overrides fail)
 ```
@@ -62,14 +65,12 @@ partial grid is dropped on store (`grid = null`) so it can never be borrowed ont
 a row a later summary marks solved. See
 [src/parsers/activity-image.parser.ts](../src/parsers/activity-image.parser.ts).
 
-## Score and averages
+## Score
 
-Two different averages are reported, and they are not the same number:
-
-- **Average score** penalises losses. Each game scores its guess count, or
-  `FAIL_SCORE` (7, one worse than a 6/6) for a loss. This is the leaderboard
-  ranking key, lower is better.
-- **Average guesses** is computed over wins only and ignores losses entirely.
+**Average score** is the only average reported. Each game scores its guess
+count, or `FAIL_SCORE` (7, one worse than a 6/6) for a loss, so losses are
+penalised rather than ignored. This is the leaderboard ranking key, lower is
+better.
 
 The per-game scoring rule lives in exactly one function, `penaltyScore` in
 [src/stats/stats.ts](../src/stats/stats.ts), so every average, ranking, and

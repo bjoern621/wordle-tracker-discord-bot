@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summarize, aggregateLeaderboard, buildWeeklyGrid, headToHead } from '../src/stats/stats.js';
+import { summarize, aggregateLeaderboard, buildWeeklyGrid, headToHead, penaltyScore } from '../src/stats/stats.js';
+import { FAIL_SCORE } from '../src/constants.js';
 import type { DailyResultRow, LeaderboardRow, UserResultRow } from '../src/db/results.repository.js';
 
 function userRow(
@@ -31,6 +32,42 @@ test('summarize counts wins, averages, distribution and streaks', () => {
   assert.deepEqual(s.distribution, [0, 1, 1, 1, 1, 0]);
   assert.equal(s.longest, 2); // 1-2 and 4-5
   assert.equal(s.current, 2); // latest solve 5, back through 4
+});
+
+// The avg-score contribution of any unsolved game is FAIL_SCORE, never its guess
+// count. Swept over every partial count an unfinished game can carry (1-5) and the
+// completed-failure count (6) to lock the invariant in: the count is ignored.
+test('every unfinished guess count scores FAIL_SCORE for the average', () => {
+  for (let g = 1; g <= 6; g += 1) {
+    assert.equal(penaltyScore({ solved: false, guesses: g }), FAIL_SCORE);
+    // avgScore over a 4-win plus this loss stays (4 + 7) / 2 regardless of g.
+    assert.equal(summarize([userRow(1, 4, true), userRow(2, g, false)]).avgScore, (4 + FAIL_SCORE) / 2);
+  }
+});
+
+// An unfinished game stores its partial guess count (1-5) but solved=false. That
+// count must never reach a metric: it scores FAIL_SCORE like any loss, stays out
+// of the distribution and best, and breaks the streak exactly like a 6/6 failure.
+test('an unfinished game scores as a loss regardless of its partial guess count', () => {
+  const unfinished = summarize([
+    userRow(1, 4, true),
+    userRow(2, 2, false), // abandoned after 2 guesses
+    userRow(3, 5, true),
+  ]);
+  const failed = summarize([
+    userRow(1, 4, true),
+    userRow(2, 6, false), // completed X/6
+    userRow(3, 5, true),
+  ]);
+  // The partial count (2) and the full failure (6) produce identical metrics.
+  assert.equal(unfinished.avgScore, failed.avgScore);
+  assert.equal(unfinished.avgScore, (4 + 7 + 5) / 3); // the loss counts as FAIL_SCORE, not 2
+  assert.deepEqual(unfinished.distribution, failed.distribution);
+  assert.deepEqual(unfinished.distribution, [0, 0, 0, 1, 1, 0]); // the 2/false loss is absent
+  assert.equal(unfinished.best, 4); // best comes from wins only, never the partial count
+  assert.equal(unfinished.fails, 1);
+  assert.equal(unfinished.longest, 1); // the loss at puzzle 2 breaks the run
+  assert.equal(unfinished.current, 1); // latest solve is puzzle 3, alone
 });
 
 test('summarize counts hard mode, reported or grid-inferred', () => {
@@ -69,7 +106,6 @@ test('aggregateLeaderboard ranks by average score then games', () => {
   assert.equal(board[0].avgScore, 3); // (2+4)/2
   assert.equal(board[0].best, 2);
   assert.equal(board[1].avgScore, 5); // (3+7)/2, fail counts as 7
-  assert.equal(board[1].avgGuesses, 3); // only the solved game
 });
 
 test('buildWeeklyGrid gives one row per player, ranked by average score', () => {

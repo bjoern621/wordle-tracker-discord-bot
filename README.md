@@ -5,6 +5,14 @@ monthly, weekly), per-player stats, and head-to-head comparisons. Self-hosted,
 works across every server it is invited to, PostgreSQL storage (schema via
 pgschema, queries via node-postgres).
 
+It captures results from five message sources:
+
+- **Daily summary**: the official Wordle Activity's once-a-day results post.
+- **Wordle app share**: a result shared from the official Wordle website or app.
+- **Wordle Discord bot share**: a result shared from the official Wordle Discord bot.
+- **Scoredle share text**: results posted by the third-party Scoredle game.
+- **Per-game image**: the Wordle Activity's solo "X was playing" result image.
+
 Each server picks the channel to track with `/set-channel` (admin only). The
 choice is stored per server, so the bot resumes tracking after a restart. A
 server with no channel set is ignored.

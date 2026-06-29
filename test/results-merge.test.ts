@@ -101,6 +101,16 @@ test('a newer message flipping solved reports updated', () => {
   assert.equal(plan.status, 'updated');
 });
 
+// The unfinished-game lifecycle: a partial grid is stored as a loss with its real
+// row count (3/false), then the player finishes and the edited message re-ingests
+// newer (5/true). The finishing score wins and the row becomes a solve.
+test('a finishing edit overrides an unfinished partial-count loss', () => {
+  const existing = existingRow({ guesses: 3, solved: false, message_ts: T_DAY });
+  const plan = planResultWrite(existing, incoming({ source: 'activity', guesses: 5, solved: true, messageTs: T_NEXT }));
+  assert.equal(plan.kind, 'upsert');
+  assert.equal(plan.status, 'updated');
+});
+
 // Equal timestamps are not stale; the incoming row wins (edited message re-ingest).
 test('an equal-timestamp message overwrites rather than being treated as stale', () => {
   const existing = existingRow({ guesses: 5, message_ts: T_NEXT });

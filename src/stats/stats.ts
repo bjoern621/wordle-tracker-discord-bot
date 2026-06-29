@@ -17,8 +17,6 @@ export interface GameTotals {
   winRate: number;
   /** Mean penalty score (fails count as FAIL_SCORE); null when no games. */
   avgScore: number | null;
-  /** Mean guesses across wins only; null when no wins. */
-  avgGuesses: number | null;
   /** Fewest guesses in a win; null when no wins. */
   best: number | null;
 }
@@ -60,13 +58,11 @@ export function penaltyScore(r: { solved: boolean; guesses: number }): number {
 export function totals(rows: readonly { solved: boolean; guesses: number }[]): GameTotals {
   let wins = 0;
   let scoreSum = 0;
-  let guessSum = 0;
   let best: number | null = null;
   for (const r of rows) {
     scoreSum += penaltyScore(r);
     if (r.solved) {
       wins += 1;
-      guessSum += r.guesses;
       best = best == null ? r.guesses : Math.min(best, r.guesses);
     }
   }
@@ -77,7 +73,6 @@ export function totals(rows: readonly { solved: boolean; guesses: number }[]): G
     fails: games - wins,
     winRate: games ? wins / games : 0,
     avgScore: games ? scoreSum / games : null,
-    avgGuesses: wins ? guessSum / wins : null,
     best,
   };
 }

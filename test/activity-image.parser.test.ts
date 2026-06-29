@@ -1,7 +1,8 @@
 // Exercises the activity-image parser against real Activity preview PNGs, with
-// fetch stubbed to serve the fixture bytes. Covers the unfinished-game rule: an
-// unfinished grid is recorded as a failure immediately, on any day, and is
-// overridden later if the player finishes the puzzle.
+// fetch stubbed to serve the fixture bytes. Covers every game state the parser
+// produces: a win (solved, with colours), a completed failure (6 rows, no solve),
+// and an unfinished grid (recorded as a failure immediately, on any day, carrying
+// the partial row count and overridden later if the player finishes the puzzle).
 
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -50,21 +51,30 @@ test('a finished grid is recorded with its score and colours', async () => {
   assert.deepEqual(games[0].grid, ['YBGBB', 'BYBBG', 'GBGGG', 'GGGGG']);
 });
 
-test('an unfinished grid for a past day is recorded as a failure with no grid', async () => {
-  stubFetch(fixture('abandoned-3of6.png'));
+test('a completed failure (6 rows, no solve) is recorded as 6/false with colours', async () => {
+  stubFetch(fixture('failed-6of6.png'));
   const games = await activityImageParser.parse(activityMessage(new Date(Date.now() - 5 * DAY)), ctx);
   assert.ok(games && games.length === 1);
   assert.equal(games[0].solved, false);
   assert.equal(games[0].guesses, 6);
+  assert.deepEqual(games[0].grid, ['BBBBB', 'BYBBB', 'BBYYG', 'GGBGG', 'GGBGG', 'GGBGG']);
+});
+
+test('an unfinished grid for a past day is recorded as a failure with its partial guess count', async () => {
+  stubFetch(fixture('abandoned-3of6.png'));
+  const games = await activityImageParser.parse(activityMessage(new Date(Date.now() - 5 * DAY)), ctx);
+  assert.ok(games && games.length === 1);
+  assert.equal(games[0].solved, false);
+  assert.equal(games[0].guesses, 3); // the three rows actually played, not a hardcoded 6
   assert.equal(games[0].grid, null);
 });
 
-test('an unfinished grid for the current day is also recorded as a failure', async () => {
+test('an unfinished grid for the current day is also recorded with its partial guess count', async () => {
   stubFetch(fixture('abandoned-3of6.png'));
   const games = await activityImageParser.parse(activityMessage(new Date()), ctx);
   assert.ok(games && games.length === 1);
   assert.equal(games[0].solved, false);
-  assert.equal(games[0].guesses, 6);
+  assert.equal(games[0].guesses, 3);
   assert.equal(games[0].grid, null);
 });
 
