@@ -63,6 +63,14 @@ test('a solved game ends on the answer and an all-green row', async () => {
   assert.equal(games?.[0].answer, 'crane');
 });
 
+test('reads a status hidden behind a whole-message spoiler', async () => {
+  const games = await parse(`||${FAILED}||`);
+  assert.equal(games?.length, 1);
+  assert.equal(games?.[0].answer, 'crude');
+  assert.deepEqual(games?.[0].words, ['zilch', 'wussy', 'pussy', 'tossy', 'brown', 'drown']);
+  assert.deepEqual(games?.[0].grid, ['BBBYB', 'BYBBB', 'BYBBB', 'BBBBB', 'BGBBB', 'YGBBB']);
+});
+
 test('returns null for a plain colour-emoji share (no letter tiles)', async () => {
   assert.equal(await parse('Wordle 1,835 4/6\n\n🟩🟩🟩🟩🟩'), null);
 });

@@ -68,8 +68,23 @@ for games seen via share text or the per-game image.
    INTENT** and **SERVER MEMBERS INTENT** -> Save. (Members is used to resolve
    the plain `@nickname` players in daily summaries.)
 4. **OAuth2 -> URL Generator** -> scopes **bot** + **applications.commands** ->
-   permissions: View Channels, Read Message History, Send Messages, Embed Links,
-   Attach Files. Open the URL and add the bot to the server.
+   select the permissions in the table below. Open the URL and add the bot to the
+   server.
+
+The bot needs these permissions in the tracked channel:
+
+| Permission | Why |
+| --- | --- |
+| View Channels | Read the tracked channel. |
+| Read Message History | Ingest past messages on backfill. |
+| Send Messages | Post command replies and the weekly leaderboard. |
+| Embed Links | Render embeds in command replies. |
+| Attach Files | Post the rendered image cards (leaderboard, stats, share). |
+| Manage Messages | Delete a pasted `/status` after recording it, so it does not spoil the answer. |
+
+Two privileged gateway intents are enabled separately on the **Bot** tab (step 3):
+**Message Content** to read message text, and **Server Members** to resolve plain
+`@nickname` players in daily summaries.
 
 ### 2. Configure
 

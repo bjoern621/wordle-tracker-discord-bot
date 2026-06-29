@@ -83,7 +83,15 @@ client.on(Events.GuildCreate, async (guild) => {
 
 client.on(Events.MessageCreate, async (message) => {
   try {
-    await ingestMessage(message);
+    const outcome = await ingestMessage(message);
+    // A pasted /status names the answer word, so leaving it in the channel spoils
+    // the puzzle for everyone else. Once the result is recorded, delete it. Needs
+    // the Manage Messages permission; a failure is logged, not fatal.
+    if (outcome?.source === 'status') {
+      await message.delete().catch((err) => {
+        console.warn(`Could not delete /status message ${message.id}:`, errMessage(err));
+      });
+    }
   } catch (err) {
     console.error('Ingest (create) failed:', errMessage(err));
   }

@@ -15,6 +15,10 @@ const HEADER_RE = /Wordle\s+(\d[\d.,]*)\s+([1-6X])\s*\/\s*6(\*?)/i;
 const ANSWER_RE = /The word is\s+([a-z]{5})\b/i;
 // One tile: a single guessed letter and its colour.
 const TILE_RE = /:([a-z])(grey|yellow|green):/gi;
+// Discord spoiler markers. A player who hides the paste behind a spoiler wraps the
+// whole message (or parts of it) in `||...||`; the bars never occur in a real
+// status, so stripping them all normalizes any placement back to plain text.
+const SPOILER_RE = /\|\|/g;
 
 const COLOUR: Record<string, string> = { grey: 'B', yellow: 'Y', green: 'G' };
 
@@ -47,7 +51,7 @@ class StatusTextParser implements WordleParser {
     const author = message.author;
     if (!author || author.system) return null;
 
-    const content = message.content;
+    const content = message.content?.replace(SPOILER_RE, '');
     if (!content) return null;
 
     const header = content.match(HEADER_RE);
