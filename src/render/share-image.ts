@@ -1,7 +1,9 @@
 // Renders a /share card: the Wordle title, the player, the colour grid (with the
 // guessed letters when known), and the overlay lines the view carries. The tile
 // palette is the canonical Wordle one (a different look from the GitHub-calendar
-// greens in theme.ts), so it lives here; the canvas primitives are shared.
+// greens in theme.ts), so it lives here; the canvas primitives are shared. Notes
+// (why a requested overlay is missing) are not drawn on the card; the command
+// shows them to the invoker only, via an ephemeral reply.
 
 import { createCanvas, type SKRSContext2D } from '@napi-rs/canvas';
 import { FONT, BACKGROUND, NOT_PLAYED, rgb, roundRect } from './theme.js';
@@ -21,8 +23,6 @@ const SUB_H = 26;
 const GRID_TOP_GAP = 14;
 const FOOTER_GAP = 18;
 const FOOTER_LH = 26;
-const NOTE_GAP = 14;
-const NOTE_LH = 22;
 
 const MIN_W = 360;
 const BRIGHT = '#e6edf3';
@@ -45,39 +45,16 @@ function footerLines(view: ShareView): string[] {
   return lines;
 }
 
-// Greedy word wrap of `text` to lines no wider than `maxWidth` at the current font.
-function wrap(ctx: SKRSContext2D, text: string, maxWidth: number): string[] {
-  const lines: string[] = [];
-  let line = '';
-  for (const word of text.split(' ')) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (ctx.measureText(candidate).width > maxWidth && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = candidate;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
 export function renderSharePng(view: ShareView): Buffer {
   const hasWL = view.rows.some((r) => r.wordsLeft != null);
   const width = Math.max(MIN_W, PAD * 2 + GRID_W + (hasWL ? WL_COL : 0));
   const textW = width - PAD * 2;
 
-  // Measure first (font metrics are canvas-size independent) so wrapped notes and
-  // the footer count can size the canvas height.
-  const measure = createCanvas(10, 10).getContext('2d');
-  measure.font = `15px ${FONT}`;
-  const noteLines = view.notes.flatMap((n) => wrap(measure, n, textW));
   const footers = footerLines(view);
 
   let height = PAD + TITLE_H + SUB_H;
   if (view.rows.length) height += GRID_TOP_GAP + view.rows.length * TILE + (view.rows.length - 1) * TGAP;
   if (footers.length) height += FOOTER_GAP + footers.length * FOOTER_LH;
-  if (noteLines.length) height += NOTE_GAP + noteLines.length * NOTE_LH;
   height += PAD;
 
   const canvas = createCanvas(width * SCALE, height * SCALE);
@@ -119,18 +96,6 @@ export function renderSharePng(view: ShareView): Buffer {
       ctx.font = `17px ${FONT}`;
       ctx.fillText(fit(ctx, line, textW), PAD, y);
       y += FOOTER_LH;
-    }
-  }
-
-  if (noteLines.length) {
-    y += NOTE_GAP;
-    ctx.fillStyle = DIM;
-    ctx.font = `15px ${FONT}`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    for (const line of noteLines) {
-      ctx.fillText(line, PAD, y);
-      y += NOTE_LH;
     }
   }
 

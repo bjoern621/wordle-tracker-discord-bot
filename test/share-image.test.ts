@@ -1,5 +1,6 @@
 // Smoke test for the share card renderer: it must produce a real PNG for a
-// fully-overlaid /status game and for a colour-only game with notes.
+// fully-overlaid /status game and for a colour-only game. Notes are not drawn on
+// the card (the command shows them ephemerally), so the renderer ignores them.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,7 +37,7 @@ test('renders a card with every overlay', () => {
   assert.ok(isPng(png));
 });
 
-test('renders a colour-only card with a note and no overlays', () => {
+test('renders a colour-only card with no overlays (notes are not drawn)', () => {
   const view: ShareView = {
     numberLabel: '1,835',
     score: '4/6',

@@ -1,4 +1,9 @@
-import { AttachmentBuilder, SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
+import {
+  AttachmentBuilder,
+  MessageFlags,
+  SlashCommandBuilder,
+  type ChatInputCommandInteraction,
+} from 'discord.js';
 import type { BotCommand } from './command.js';
 import { getUserGame, getLatestUserGame } from '../db/results.repository.js';
 import { buildShareView, type ShareOptions } from '../share/share-model.js';
@@ -83,10 +88,20 @@ export const shareCommand: BotCommand = {
 
     if (opts.format === 'text') {
       await interaction.editReply({ content: buildShareText(view) });
-      return;
+    } else {
+      const file = new AttachmentBuilder(renderSharePng(view), { name: 'share.png' });
+      file.setSpoiler(view.spoiler);
+      await interaction.editReply({ files: [file] });
     }
-    const file = new AttachmentBuilder(renderSharePng(view), { name: 'share.png' });
-    file.setSpoiler(view.spoiler);
-    await interaction.editReply({ files: [file] });
+
+    // Why a requested overlay could not be shown is the invoker's business, not
+    // the channel's: the shared card or text block stays clean, and the hint
+    // (e.g. that a game needs /status to carry the words) goes out ephemerally.
+    if (view.notes.length) {
+      await interaction.followUp({
+        content: view.notes.map((n) => `_${n}_`).join('\n'),
+        flags: MessageFlags.Ephemeral,
+      });
+    }
   },
 };
