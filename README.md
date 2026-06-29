@@ -42,21 +42,18 @@ which diffs it against the live database and applies the difference (a one-shot
 Postgres runs as its own container with a named volume, so data persists across
 restarts.
 
-One row per (server, player, puzzle) is the single source of truth for a game.
-It holds the puzzle number, win/loss, guess count, and the per-guess colour grid
-(rows of B/Y/G) when a source provides it. The daily summary carries only the
-score, so summary-only days have no grid. All stats (averages, streaks,
-distributions, leaderboards) are computed from these rows, not stored.
+One row per (server, player, puzzle) is the single source of truth for a game:
+puzzle number, win/loss, guess count, and the per-guess colour grid (rows of
+B/Y/G) when a source provides it. Summary-only days carry just the score and have
+no grid. All stats (averages, streaks, distributions, leaderboards) are computed
+from these rows, not stored.
 
-Results never double-count: on conflict the **most recent message wins** (by
-message timestamp, so backfill order cannot corrupt data). An override preserves
-the grid and hard-mode flag when the newer message lacks them, so colour detail
-is never lost.
-
-History is recovered by scanning past messages (`/backfill` or
-`BACKFILL_ON_START`); the daily summaries make this a complete day-by-day record
-(scores) as far back as the channel goes. Grid colours only exist going forward
-for games seen via share text or the per-game image.
+On conflict the **most recent message wins** (by message timestamp, so backfill
+order cannot corrupt data), and an override keeps the grid and hard-mode flag
+when the newer message lacks them. `/backfill` (or `BACKFILL_ON_START`) recovers
+history by scanning past messages: the daily summaries give a complete day-by-day
+score record as far back as the channel goes, while grid colours exist only going
+forward, for games seen via share text or the per-game image.
 
 ## Setup
 
@@ -82,9 +79,7 @@ The bot needs these permissions in the tracked channel:
 | Attach Files | Post the rendered image cards (leaderboard, stats, share). |
 | Manage Messages | Delete a pasted `/status` after recording it, so it does not spoil the answer. |
 
-Two privileged gateway intents are enabled separately on the **Bot** tab (step 3):
-**Message Content** to read message text, and **Server Members** to resolve plain
-`@nickname` players in daily summaries.
+The two gateway intents from step 3 are separate from these channel permissions.
 
 ### 2. Configure
 
@@ -92,10 +87,8 @@ Two privileged gateway intents are enabled separately on the **Bot** tab (step 3
 task setup
 ```
 Fill in every variable in `.env` (see the configuration reference below). The
-bot validates them all at startup and exits with the list of problems if any is
-missing or malformed, so there is nothing optional to skip. The channel to track
-is not configured here: run `/set-channel` in each server after the bot starts.
-To import that channel's existing history on first run, set
+channel to track is not configured here: run `/set-channel` in each server after
+the bot starts. To import that channel's existing history on first run, set
 `BACKFILL_ON_START=true` (it scans every server that has a channel set).
 
 ### 3. Run
@@ -109,11 +102,9 @@ task up        # starts db, runs migrate, starts bot
 task logs
 ```
 
-The phases are also separate tasks: `task db` starts only Postgres and
-`task migrate` applies the schema. The Postgres data lives in the `pgdata` volume
-and survives `task down`; `task reset` wipes the volume and starts fresh. After
-editing `db/schema.sql`, re-run `task migrate` to converge the database; it is a
-no-op when already in sync.
+The Postgres data lives in the `pgdata` volume and survives `task down`;
+`task reset` wipes it and starts fresh. After editing `db/schema.sql`, re-run
+`task migrate` to converge the database; it is a no-op when already in sync.
 
 ## Task runner
 
@@ -175,16 +166,10 @@ direnv, run `nix develop` for the same environment.
 
 ## Diagnostics
 
-The Phase 0 logger that dumps raw messages/embeds is still available for
-inspecting new formats:
-
-```sh
-task logger
-```
-
-With `SAVE_IMAGES=true`, every image the Activity posts is downloaded and sorted
-by message kind into `data/images/<category>/`, each file prefixed with the
-puzzle number it belongs to:
+`task logger` runs the Phase 0 logger, which dumps raw messages and embeds for
+inspecting new formats. With `SAVE_IMAGES=true` it also downloads every image the
+Activity posts, sorted by message kind into `data/images/<category>/` and
+prefixed with the puzzle number:
 
 | Category | Source message | Image |
 | --- | --- | --- |
@@ -194,8 +179,8 @@ puzzle number it belongs to:
 | `other` | Any non-Activity author | Whatever that message attached (only when no author filter is set). |
 
 This keeps a replayable corpus after the Discord CDN URLs expire. A captured
-`summary` or `multi` board can be copied straight into `test/fixtures/images/`
-to back a parser test, the same way the `solo` grids back the existing ones.
+`summary` or `multi` board can be copied into `test/fixtures/images/` to back a
+parser test, the same way the `solo` grids back the existing ones.
 
 ## Configuration reference
 
