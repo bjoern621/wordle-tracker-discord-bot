@@ -58,7 +58,7 @@ function buildMonthView(rows: UserResultRow[], userId: string, name: string, mon
   const months = playedMonths(rows);
   const data = buildMonth(rows, month, config.timeZone);
   const file = new AttachmentBuilder(renderMonthPng(data), { name: 'month.png' });
-  const content = `**${name}**\nSolved **${data.solved}** of **${data.played}** played. Brighter green = fewer guesses.`;
+  const content = `**${name}**\nSolved **${data.solved}** of **${data.played}** played.`;
 
   return { content, files: [file], components: [monthMenu(userId, months, month)] };
 }

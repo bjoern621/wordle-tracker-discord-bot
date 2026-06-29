@@ -61,9 +61,31 @@ export function rejectFuturePuzzles<T extends { number: number }>(
   return { kept, dropped };
 }
 
+/** Periods offered by the leaderboard and stats commands, ordered widest first. */
+export const PERIODS = ['all', 'year', 'month', 'week', 'day'] as const;
+
+/** Human label for each period, shown in command choices and image titles. */
+export const PERIOD_LABEL: Record<Period, string> = {
+  all: 'All time',
+  year: 'This year',
+  month: 'This month',
+  week: 'This week',
+  day: 'Today',
+};
+
+/** Narrows a raw option string to a Period, defaulting to all time. */
+export function periodFrom(value: string | null): Period {
+  return value != null && (PERIODS as readonly string[]).includes(value)
+    ? (value as Period)
+    : 'all';
+}
+
 /** Inclusive [from, to] ISO date bounds for a leaderboard period, in timezone. */
 export function periodRange(period: Period, timeZone = 'UTC'): [string, string] {
   const todayIso = localDateISO(new Date(), timeZone);
+  if (period === 'day') {
+    return [todayIso, todayIso];
+  }
   if (period === 'week') {
     const dow = (new Date(`${todayIso}T00:00:00Z`).getUTCDay() + 6) % 7; // 0 = Monday
     return [shiftISO(todayIso, -dow), shiftISO(todayIso, 6 - dow)];
@@ -74,6 +96,10 @@ export function periodRange(period: Period, timeZone = 'UTC'): [string, string] 
       Date.UTC(Number(todayIso.slice(0, 4)), Number(todayIso.slice(5, 7)), 0),
     ).getUTCDate();
     return [first, `${todayIso.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`];
+  }
+  if (period === 'year') {
+    const year = todayIso.slice(0, 4);
+    return [`${year}-01-01`, `${year}-12-31`];
   }
   return ['0000-01-01', '9999-12-31'];
 }

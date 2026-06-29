@@ -7,7 +7,7 @@ import { commands } from './commands/index.js';
 import { HISTORY_MONTH_SELECT, handleHistorySelect } from './commands/history.command.js';
 import { syncGuild } from './identity/identity.js';
 import { loadGuildChannels, trackedChannels } from './settings/guild-channels.js';
-import { scheduleWeeklyReport } from './reports/weekly-schedule.js';
+import { scheduleWeeklyLeaderboard } from './reports/leaderboard-schedule.js';
 import { MEMBER_SYNC_INTERVAL_MS, OFFICIAL_WORDLE_APP_ID } from './constants.js';
 
 const client = createClient();
@@ -69,7 +69,7 @@ client.once(Events.ClientReady, async (ready) => {
   syncAllGuilds(ready);
   setInterval(() => syncAllGuilds(ready), MEMBER_SYNC_INTERVAL_MS);
 
-  scheduleWeeklyReport(ready);
+  scheduleWeeklyLeaderboard(ready);
 
   if (config.backfillOnStart) await backfillConfiguredChannels(ready);
 });

@@ -1,6 +1,6 @@
 // Renders a player's stats as a card: a strip of summary tiles over a
 // horizontal bar chart of the guess distribution, shaded like the /history
-// calendar (brighter green = fewer guesses, red = fails).
+// calendar (red = fails).
 
 import { createCanvas, type SKRSContext2D } from '@napi-rs/canvas';
 import { FONT, BACKGROUND, NOT_PLAYED, rgb, roundRect, type RGB } from './theme.js';

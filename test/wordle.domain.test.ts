@@ -67,6 +67,18 @@ test('the all-time period is unbounded', () => {
   assert.deepEqual(periodRange('all'), ['0000-01-01', '9999-12-31']);
 });
 
+test('a day period is the single current day', () => {
+  const [from, to] = periodRange('day', 'UTC');
+  assert.equal(from, to);
+});
+
+test('a year period spans Jan 1 to Dec 31 of one year', () => {
+  const [from, to] = periodRange('year', 'UTC');
+  assert.ok(from.endsWith('-01-01'));
+  assert.ok(to.endsWith('-12-31'));
+  assert.equal(from.slice(0, 4), to.slice(0, 4));
+});
+
 test('a week period is Monday through Sunday', () => {
   const [from, to] = periodRange('week', 'UTC');
   assert.equal(new Date(`${from}T00:00:00Z`).getUTCDay(), 1); // Monday

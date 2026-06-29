@@ -22,7 +22,7 @@ export interface WeeklyImageRow {
 }
 
 export interface WeeklyImageData {
-  title: string; // "Weekly Wordle - #1829-1835"
+  title: string; // "Wordle Leaderboard"
   span: string; // "Jun 22 - Jun 28"
   columns: WeeklyImageColumn[];
   rows: WeeklyImageRow[];
@@ -57,7 +57,13 @@ export function renderWeeklyPng(data: WeeklyImageData): Buffer {
   const cellsW = cols * CELL + (cols - 1) * GAP;
   const gridLeft = PAD + NAME_W;
   const avgLeft = gridLeft + cellsW + GAP * 2;
-  const width = avgLeft + AVG_W + PAD;
+  // A few columns leave the grid narrower than the title row; widen to fit both.
+  const measure = createCanvas(1, 1).getContext('2d');
+  measure.font = `28px ${FONT}`;
+  const titleW = measure.measureText(data.title).width;
+  measure.font = `18px ${FONT}`;
+  const spanW = measure.measureText(data.span).width;
+  const width = Math.max(avgLeft + AVG_W + PAD, PAD + titleW + GAP * 4 + spanW + PAD);
   const gridTop = PAD + TITLE_H + HEADER_H;
   const height = gridTop + rows * CELL + (rows - 1) * GAP + PAD;
 

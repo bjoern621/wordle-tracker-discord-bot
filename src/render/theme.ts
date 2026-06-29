@@ -15,7 +15,7 @@ export type RGB = [number, number, number];
 export const BACKGROUND: RGB = [13, 17, 23];
 export const NOT_PLAYED: RGB = [22, 27, 34];
 export const FAILED: RGB = [218, 54, 51];
-// Dim to bright; fewer guesses pick a brighter shade.
+// Indexed from fewest guesses to most.
 const GREENS: RGB[] = [
   [14, 68, 41],
   [0, 109, 50],
@@ -23,7 +23,7 @@ const GREENS: RGB[] = [
   [57, 211, 83],
 ];
 
-/** Green shade for a solved game: fewer guesses is brighter. */
+/** Green shade for a solved game, keyed by guess count. */
 export function greenFor(guesses: number): RGB {
   if (guesses <= 2) return GREENS[3];
   if (guesses === 3) return GREENS[2];
