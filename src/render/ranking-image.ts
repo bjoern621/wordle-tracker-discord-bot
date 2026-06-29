@@ -10,6 +10,7 @@ export interface RankingRow {
   games: number;
   winRate: number; // 0..1
   avgScore: number | null; // null when the player has no games
+  avgTime: string; // pre-formatted solve time, e.g. "2m 5s" or "-" when untimed
 }
 
 export interface RankingImageData {
@@ -27,6 +28,7 @@ const RANK_W = 56;
 const NAME_W = 240;
 const GAMES_W = 96;
 const WIN_W = 110;
+const TIME_W = 110;
 const AVG_W = 96;
 const RADIUS = 10;
 const SCALE = 2; // output pixel density; layout is authored at 1x
@@ -52,7 +54,8 @@ export function renderRankingPng(data: RankingImageData): Buffer {
   const nameLeft = rankLeft + RANK_W;
   const gamesLeft = nameLeft + NAME_W;
   const winLeft = gamesLeft + GAMES_W;
-  const avgLeft = winLeft + WIN_W;
+  const timeLeft = winLeft + WIN_W;
+  const avgLeft = timeLeft + TIME_W;
   const width = avgLeft + AVG_W + PAD;
   const gridTop = PAD + TITLE_H + HEADER_H;
   const height = gridTop + rows * ROW_H + (rows - 1) * GAP + PAD;
@@ -83,6 +86,7 @@ export function renderRankingPng(data: RankingImageData): Buffer {
   ctx.textAlign = 'center';
   ctx.fillText('games', gamesLeft + GAMES_W / 2, headerY);
   ctx.fillText('win%', winLeft + WIN_W / 2, headerY);
+  ctx.fillText('time', timeLeft + TIME_W / 2, headerY);
   ctx.fillText('avg', avgLeft + AVG_W / 2, headerY);
 
   data.rows.forEach((row, r) => {
@@ -103,6 +107,11 @@ export function renderRankingPng(data: RankingImageData): Buffer {
     ctx.textAlign = 'center';
     ctx.fillText(String(row.games), gamesLeft + GAMES_W / 2, midY);
     ctx.fillText(`${Math.round(row.winRate * 100)}%`, winLeft + WIN_W / 2, midY);
+
+    // Solve time is dimmer than the score columns: only Activity-sourced games
+    // carry it, so many rows show "-".
+    ctx.fillStyle = row.avgTime === '-' ? '#7d8590' : '#e6edf3';
+    ctx.fillText(row.avgTime, timeLeft + TIME_W / 2, midY);
 
     const tileTop = top + (ROW_H - 44) / 2;
     ctx.fillStyle = rgb(avgColor(row.avgScore));

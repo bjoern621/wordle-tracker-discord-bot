@@ -20,6 +20,7 @@ export interface WeeklyImageColumn {
 export interface WeeklyImageRow {
   name: string;
   avg: string; // pre-formatted, e.g. "3.71"
+  time: string; // pre-formatted avg solve time, e.g. "2m 5s" or "-" when untimed
   cells: (WeeklyImageCell | null)[]; // aligned to columns
 }
 
@@ -136,10 +137,19 @@ export function renderWeeklyPng(data: WeeklyImageData): Buffer {
       }
     });
 
+    // Avg score sits in the gutter; when the player has timed games, the mean
+    // solve time rides dimly below it. Untimed players ("-") just show the score.
+    const avgX = avgLeft + AVG_W / 2;
+    const timed = row.time !== '-';
     ctx.fillStyle = '#e6edf3';
     ctx.font = `30px ${FONT}`;
     ctx.textAlign = 'center';
-    ctx.fillText(row.avg, avgLeft + AVG_W / 2, midY);
+    ctx.fillText(row.avg, avgX, timed ? midY - 12 : midY);
+    if (timed) {
+      ctx.fillStyle = '#7d8590';
+      ctx.font = `15px ${FONT}`;
+      ctx.fillText(row.time, avgX, midY + 16);
+    }
   });
 
   return canvas.toBuffer('image/png');

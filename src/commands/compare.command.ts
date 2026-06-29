@@ -2,7 +2,7 @@ import { AttachmentBuilder, SlashCommandBuilder, type ChatInputCommandInteractio
 import type { BotCommand } from './command.js';
 import { getUserResults, type UserResultRow } from '../db/results.repository.js';
 import { summarize, headToHead, openerStrength } from '../stats/stats.js';
-import { pct, fixed, openerLabel } from '../stats/format.js';
+import { pct, fixed, openerLabel, duration } from '../stats/format.js';
 import { renderComparePng, type CompareStat, type Lead } from '../render/compare-image.js';
 import { config } from '../config/index.js';
 import { periodOption, customFromOption, customToOption, resolveRange } from './shared.js';
@@ -68,6 +68,8 @@ export const compareCommand: BotCommand = {
     const stats: CompareStat[] = [
       { label: 'Win rate', v1: pct(s1.winRate), v2: pct(s2.winRate), lead: higher(s1.winRate, s2.winRate) },
       { label: 'Avg score', v1: fixed(s1.avgScore), v2: fixed(s2.avgScore), lead: lower(s1.avgScore, s2.avgScore) },
+      // Faster leads; a player with no timed solves shows "-" and never leads.
+      { label: 'Avg time', v1: duration(s1.avgSolveSeconds), v2: duration(s2.avgSolveSeconds), lead: lower(s1.avgSolveSeconds, s2.avgSolveSeconds) },
       { label: 'Opener', v1: openerLabel(o1), v2: openerLabel(o2), lead: higher(o1, o2) },
       { label: 'Longest streak', v1: String(s1.longest), v2: String(s2.longest), lead: higher(s1.longest, s2.longest) },
       // Total games over the whole period (not just shared), so the card shows

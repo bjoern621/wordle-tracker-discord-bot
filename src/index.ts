@@ -61,6 +61,13 @@ client.once(Events.ClientReady, async (ready) => {
 
   await loadGuildChannels();
 
+  // Commands are now registered per guild. Clear any leftover global commands
+  // from when the bot used global registration, otherwise Discord serves both
+  // sets and every command appears duplicated. Idempotent once globals are empty.
+  await ready.application.commands.set([]).catch((err) => {
+    console.error('Clearing global commands failed:', errMessage(err));
+  });
+
   // Register commands in every guild the bot is currently in. Guilds joined
   // later are handled by the GuildCreate event below.
   await Promise.all(ready.guilds.cache.map((guild) => registerGuildCommands(guild)));

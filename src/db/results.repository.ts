@@ -13,6 +13,8 @@ export interface LeaderboardRow {
   username: string | null;
   guesses: number;
   solved: boolean;
+  /** Seconds from first to last guess, or null when the source carried no timing. */
+  durationSeconds: number | null;
 }
 
 /** Leaderboard row plus the puzzle it belongs to, for the day-by-day weekly view. */
@@ -120,7 +122,8 @@ export async function recordResult(r: ResultRecord): Promise<RecordStatus> {
 
 export async function getResults(guildId: string, from: string, to: string): Promise<LeaderboardRow[]> {
   const { rows } = await pool.query<LeaderboardRow>(
-    `SELECT user_id AS "userId", username, guesses, solved
+    `SELECT user_id AS "userId", username, guesses, solved,
+            EXTRACT(EPOCH FROM (last_guess_at - first_guess_at))::int AS "durationSeconds"
        FROM results
       WHERE guild_id = $1 AND puzzle_date BETWEEN $2 AND $3`,
     [guildId, from, to],
@@ -131,7 +134,8 @@ export async function getResults(guildId: string, from: string, to: string): Pro
 export async function getResultsByDay(guildId: string, from: string, to: string): Promise<DailyResultRow[]> {
   const { rows } = await pool.query<DailyResultRow>(
     `SELECT user_id AS "userId", username, puzzle_number AS number, guesses, solved,
-            hard_mode AS "hardMode", grid
+            hard_mode AS "hardMode", grid,
+            EXTRACT(EPOCH FROM (last_guess_at - first_guess_at))::int AS "durationSeconds"
        FROM results
       WHERE guild_id = $1 AND puzzle_date BETWEEN $2 AND $3
       ORDER BY puzzle_number ASC`,

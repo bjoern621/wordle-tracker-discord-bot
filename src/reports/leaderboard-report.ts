@@ -7,7 +7,7 @@ import { AttachmentBuilder } from 'discord.js';
 import { getResults, getResultsByDay } from '../db/results.repository.js';
 import { numberToIso, isoToNumber } from '../domain/wordle.js';
 import { aggregateLeaderboard, buildWeeklyGrid } from '../stats/stats.js';
-import { fixed } from '../stats/format.js';
+import { fixed, duration } from '../stats/format.js';
 import { renderWeeklyPng, type WeeklyImageRow } from '../render/weekly-image.js';
 import { renderRankingPng, type RankingRow } from '../render/ranking-image.js';
 
@@ -77,6 +77,7 @@ async function buildGrid(
   const imageRows: WeeklyImageRow[] = grid.players.map((p) => ({
     name: p.username || p.userId,
     avg: fixed(p.avgScore),
+    time: duration(p.avgSolveSeconds),
     cells: grid.numbers.map((n) => p.byNumber.get(n) ?? null),
   }));
 
@@ -101,6 +102,7 @@ async function buildCard(
     games: e.games,
     winRate: e.winRate,
     avgScore: e.avgScore,
+    avgTime: duration(e.avgSolveSeconds),
   }));
 
   const png = renderRankingPng({ title: 'Wordle Leaderboard', span: label, rows });

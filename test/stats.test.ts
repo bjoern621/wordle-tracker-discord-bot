@@ -123,10 +123,10 @@ test('summarize reports null solve time when no win is timed', () => {
 
 test('aggregateLeaderboard ranks by average score then games', () => {
   const rows: LeaderboardRow[] = [
-    { userId: 'a', username: 'Alice', guesses: 2, solved: true },
-    { userId: 'a', username: 'Alice', guesses: 4, solved: true },
-    { userId: 'b', username: 'Bob', guesses: 3, solved: true },
-    { userId: 'b', username: 'Bob', guesses: 6, solved: false },
+    { userId: 'a', username: 'Alice', guesses: 2, solved: true, durationSeconds: null },
+    { userId: 'a', username: 'Alice', guesses: 4, solved: true, durationSeconds: null },
+    { userId: 'b', username: 'Bob', guesses: 3, solved: true, durationSeconds: null },
+    { userId: 'b', username: 'Bob', guesses: 6, solved: false, durationSeconds: null },
   ];
   const board = aggregateLeaderboard(rows);
   assert.deepEqual(
@@ -137,8 +137,23 @@ test('aggregateLeaderboard ranks by average score then games', () => {
   assert.equal(board[1].avgScore, 5); // (3+7)/2, fail counts as 7
 });
 
+test('aggregateLeaderboard averages solve time over solved, timed games', () => {
+  const rows: LeaderboardRow[] = [
+    { userId: 'a', username: 'Alice', guesses: 2, solved: true, durationSeconds: 120 },
+    { userId: 'a', username: 'Alice', guesses: 4, solved: true, durationSeconds: 60 },
+    { userId: 'a', username: 'Alice', guesses: 3, solved: true, durationSeconds: null }, // untimed: excluded
+    { userId: 'a', username: 'Alice', guesses: 6, solved: false, durationSeconds: 999 }, // abandoned: excluded
+    { userId: 'b', username: 'Bob', guesses: 3, solved: true, durationSeconds: null }, // no timing at all
+  ];
+  const board = aggregateLeaderboard(rows);
+  const a = board.find((e) => e.userId === 'a')!;
+  const b = board.find((e) => e.userId === 'b')!;
+  assert.equal(a.avgSolveSeconds, 90); // (120 + 60) / 2
+  assert.equal(b.avgSolveSeconds, null);
+});
+
 function dailyRow(extra: Partial<DailyResultRow> & Pick<DailyResultRow, 'userId' | 'number' | 'guesses' | 'solved'>): DailyResultRow {
-  return { username: null, hardMode: null, grid: null, ...extra };
+  return { username: null, hardMode: null, grid: null, durationSeconds: null, ...extra };
 }
 
 test('buildWeeklyGrid gives one row per player, ranked by average score', () => {
@@ -159,6 +174,19 @@ test('buildWeeklyGrid gives one row per player, ranked by average score', () => 
   assert.equal(grid.players[0].byNumber.get(10)?.guesses, 3);
   assert.equal(grid.players[0].byNumber.has(11), false); // Alice skipped puzzle 11
   assert.equal(grid.players[1].byNumber.get(11)?.solved, false); // Bob failed it
+});
+
+test('buildWeeklyGrid carries each player average solve time', () => {
+  const rows: DailyResultRow[] = [
+    dailyRow({ userId: 'a', username: 'Alice', number: 10, guesses: 3, solved: true, durationSeconds: 100 }),
+    dailyRow({ userId: 'a', username: 'Alice', number: 11, guesses: 2, solved: true, durationSeconds: 200 }),
+    dailyRow({ userId: 'b', username: 'Bob', number: 10, guesses: 4, solved: true }),
+  ];
+  const grid = buildWeeklyGrid(rows, [10, 11]);
+  const alice = grid.players.find((p) => p.userId === 'a')!;
+  const bob = grid.players.find((p) => p.userId === 'b')!;
+  assert.equal(alice.avgSolveSeconds, 150); // (100 + 200) / 2
+  assert.equal(bob.avgSolveSeconds, null);
 });
 
 // Each cell carries the same effectiveHardMode the stats card uses: the reported

@@ -34,6 +34,8 @@ export interface PlayerSummary extends GameTotals {
 export interface LeaderboardEntry extends GameTotals {
   userId: string;
   username: string | null;
+  /** Mean solve time in seconds over solved games that carry timing; null if none. */
+  avgSolveSeconds: number | null;
 }
 
 export interface HeadToHead {
@@ -87,18 +89,37 @@ export function summarize(rows: UserResultRow[]): PlayerSummary {
 }
 
 /**
- * Time-to-solve figures over the solved games that carry timing. Only the Activity
- * reveals play time, so games from other sources contribute nothing here. Both are
- * null when no solved game in the set was timed. Unfinished games are excluded: they
- * are losses, and their duration measures an abandoned attempt, not a solve.
+ * The solve durations in seconds over the games that carry timing. Only the
+ * Activity reveals play time, so games from other sources contribute nothing.
+ * Unfinished games are excluded: they are losses, and their duration measures an
+ * abandoned attempt, not a solve. The one filter the time figures share, so a
+ * player's stats card and the leaderboard average the same set of games.
+ */
+function solvedDurations(
+  rows: readonly { solved: boolean; durationSeconds: number | null }[],
+): number[] {
+  return rows
+    .filter((r) => r.solved && r.durationSeconds !== null)
+    .map((r) => r.durationSeconds as number);
+}
+
+/** Mean solve time in seconds over the timed solves, or null when none qualify. */
+function avgSolveSeconds(
+  rows: readonly { solved: boolean; durationSeconds: number | null }[],
+): number | null {
+  const times = solvedDurations(rows);
+  return times.length ? times.reduce((a, b) => a + b, 0) / times.length : null;
+}
+
+/**
+ * Time-to-solve figures over the solved games that carry timing. Both are null
+ * when no solved game in the set was timed.
  */
 function solveTimes(rows: UserResultRow[]): {
   avgSolveSeconds: number | null;
   fastestSolveSeconds: number | null;
 } {
-  const times = rows
-    .filter((r) => r.solved && r.durationSeconds !== null)
-    .map((r) => r.durationSeconds as number);
+  const times = solvedDurations(rows);
   if (!times.length) return { avgSolveSeconds: null, fastestSolveSeconds: null };
   return {
     avgSolveSeconds: times.reduce((a, b) => a + b, 0) / times.length,
@@ -163,7 +184,12 @@ export function aggregateLeaderboard(rows: LeaderboardRow[]): LeaderboardEntry[]
     u.rows.push(r);
   }
   return [...byUser.entries()]
-    .map(([userId, u]) => ({ userId, username: u.username, ...totals(u.rows) }))
+    .map(([userId, u]) => ({
+      userId,
+      username: u.username,
+      ...totals(u.rows),
+      avgSolveSeconds: avgSolveSeconds(u.rows),
+    }))
     .sort((a, b) => (a.avgScore ?? 0) - (b.avgScore ?? 0) || b.games - a.games);
 }
 
@@ -178,6 +204,8 @@ export interface WeeklyPlayerRow {
   userId: string;
   username: string | null;
   avgScore: number;
+  /** Mean solve time in seconds over solved games that carry timing; null if none. */
+  avgSolveSeconds: number | null;
   played: number;
   byNumber: Map<number, WeeklyCell>;
 }
@@ -206,6 +234,7 @@ export function buildWeeklyGrid(rows: DailyResultRow[], numbers: number[]): Week
     userId: e.userId,
     username: e.username,
     avgScore: e.avgScore ?? FAIL_SCORE,
+    avgSolveSeconds: e.avgSolveSeconds,
     played: e.games,
     byNumber: byUser.get(e.userId)!,
   }));
