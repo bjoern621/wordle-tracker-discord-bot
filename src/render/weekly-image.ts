@@ -137,19 +137,16 @@ export function renderWeeklyPng(data: WeeklyImageData): Buffer {
       }
     });
 
-    // Avg score sits in the gutter; when the player has timed games, the mean
-    // solve time rides dimly below it. Untimed players ("-") just show the score.
+    // Avg score sits in the gutter with the mean solve time riding dimly below
+    // it. The time is always shown, falling back to "-" when no timing exists.
     const avgX = avgLeft + AVG_W / 2;
-    const timed = row.time !== '-';
     ctx.fillStyle = '#e6edf3';
     ctx.font = `30px ${FONT}`;
     ctx.textAlign = 'center';
-    ctx.fillText(row.avg, avgX, timed ? midY - 12 : midY);
-    if (timed) {
-      ctx.fillStyle = '#7d8590';
-      ctx.font = `15px ${FONT}`;
-      ctx.fillText(row.time, avgX, midY + 16);
-    }
+    ctx.fillText(row.avg, avgX, midY - 12);
+    ctx.fillStyle = '#7d8590';
+    ctx.font = `15px ${FONT}`;
+    ctx.fillText(row.time, avgX, midY + 16);
   });
 
   return canvas.toBuffer('image/png');
