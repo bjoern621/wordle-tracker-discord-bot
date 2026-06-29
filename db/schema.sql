@@ -4,7 +4,11 @@
 -- One row per (server, player, puzzle): the single source of truth for a game.
 -- `grid` holds the per-guess colour pattern (rows of B/Y/G) when a source
 -- provides it (manual text or per-game image); the daily summary has only the
--- score, so grid is the one nullable column. Stats are computed from these rows.
+-- score. `guess_words` and `answer` hold the actual letters: the word guessed on
+-- each row and the puzzle solution, which only a pasted /status reveals. `hard_mode`
+-- is null until a source that reports it (the manual-text sources) is seen; an image
+-- or summary leaves it null rather than guessing. All four are nullable, fillable by
+-- a later or earlier message. Stats are computed from these rows.
 
 CREATE TABLE results (
     guild_id      text        NOT NULL,
@@ -14,7 +18,9 @@ CREATE TABLE results (
     guesses       integer     NOT NULL,
     solved        boolean     NOT NULL,
     grid          text,
-    hard_mode     boolean     NOT NULL,
+    guess_words   text,
+    answer        text,
+    hard_mode     boolean,
     source        text        NOT NULL,
     message_ts    timestamptz NOT NULL,
     username      text        NOT NULL,
@@ -35,7 +41,7 @@ CREATE TABLE results (
     CONSTRAINT results_guesses_range        CHECK (guesses BETWEEN 1 AND 6),
     CONSTRAINT results_puzzle_positive      CHECK (puzzle_number > 0),
     CONSTRAINT results_source_known
-        CHECK (source IN ('summary', 'share-text', 'scoredle', 'activity')),
+        CHECK (source IN ('summary', 'share-text', 'scoredle', 'activity', 'status')),
 
     -- puzzle_date is YYYY-MM-DD and is fully determined by puzzle_number: the
     -- Wordle calendar maps #1835 to 2026-06-28 (the anchor in numberToIso,
@@ -57,7 +63,32 @@ CREATE TABLE results (
     CONSTRAINT results_solved_grid_won
         CHECK (NOT solved OR grid IS NULL OR grid ~ '"GGGGG"\]$'),
     CONSTRAINT results_unsolved_grid_lost
-        CHECK (solved OR grid IS NULL OR grid NOT LIKE '%GGGGG%')
+        CHECK (solved OR grid IS NULL OR grid NOT LIKE '%GGGGG%'),
+
+    -- The letters, revealed only by a pasted /status. `answer` is the five-letter
+    -- lowercase solution; `guess_words` is a JSON array of five-letter lowercase
+    -- words, one per guess, in the same shape and row count as `grid`.
+    CONSTRAINT results_answer_format
+        CHECK (answer IS NULL OR answer ~ '^[a-z]{5}$'),
+    CONSTRAINT results_words_shape
+        CHECK (guess_words IS NULL OR guess_words ~ '^\["[a-z]{5}"(,"[a-z]{5}")*\]$'),
+    CONSTRAINT results_words_rows_match
+        CHECK (guess_words IS NULL OR jsonb_array_length(guess_words::jsonb) = guesses),
+
+    -- Words never stand alone: a row carrying the letters also carries the colours
+    -- they map to and the answer they aimed at.
+    CONSTRAINT results_words_need_grid
+        CHECK (guess_words IS NULL OR grid IS NOT NULL),
+    CONSTRAINT results_words_need_answer
+        CHECK (guess_words IS NULL OR answer IS NOT NULL),
+
+    -- A solved game's last guess is the answer; a lost or unfinished one never
+    -- guessed it. Each word is a quoted five-letter element, so the answer matches
+    -- exactly one element and cannot collide with a substring of another.
+    CONSTRAINT results_solved_last_word_is_answer
+        CHECK (guess_words IS NULL OR NOT solved OR guess_words LIKE '%"' || answer || '"]'),
+    CONSTRAINT results_unsolved_excludes_answer
+        CHECK (guess_words IS NULL OR solved OR guess_words NOT LIKE '%"' || answer || '"%')
 );
 
 CREATE INDEX results_guild_date_idx ON results (guild_id, puzzle_date);

@@ -76,7 +76,9 @@ class DailySummaryParser implements WordleParser {
         guesses: e.guesses,
         solved: e.solved,
         grid: matched ? card.patterns : null,
-        hardMode: false,
+        words: null,
+        answer: null,
+        hardMode: null, // the summary does not report hard mode
         player: e.player,
       };
     });

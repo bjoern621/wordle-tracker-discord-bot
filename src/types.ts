@@ -3,7 +3,7 @@
 import type { Message } from 'discord.js';
 
 /** Source that produced a stored result. */
-export type ResultSource = 'summary' | 'share-text' | 'scoredle' | 'activity';
+export type ResultSource = 'summary' | 'share-text' | 'scoredle' | 'activity' | 'status';
 
 /** Leaderboard period selectable in slash commands. */
 export type Period = 'all' | 'year' | 'month' | 'week' | 'lastweek' | 'day';
@@ -36,6 +36,13 @@ export interface ParsedGame {
   solved: boolean;
   /** Per-guess colour rows (B/Y/G), or null when the source carries no grid. */
   grid: string[] | null;
+  /**
+   * The word guessed on each row, lowercase, one per grid row. Only a pasted
+   * /status reveals the letters; every other source carries null.
+   */
+  words: string[] | null;
+  /** The puzzle's answer, lowercase, or null when the source does not reveal it. */
+  answer: string | null;
   /** Hard mode flag, or null when the source does not report it. */
   hardMode: boolean | null;
   player: PlayerRef;

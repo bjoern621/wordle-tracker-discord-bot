@@ -10,7 +10,7 @@ function userRow(
   solved: boolean,
   extra: Partial<UserResultRow> = {},
 ): UserResultRow {
-  return { number, date: numberToDate(number), guesses, solved, grid: null, hardMode: false, source: 'summary', ...extra };
+  return { number, date: numberToDate(number), guesses, solved, grid: null, hardMode: null, source: 'summary', ...extra };
 }
 const numberToDate = (n: number) => `2026-01-${String(n).padStart(2, '0')}`;
 
@@ -28,7 +28,6 @@ test('summarize counts wins, averages, distribution and streaks', () => {
   assert.equal(s.fails, 1);
   assert.equal(s.winRate, 0.8);
   assert.equal(s.avgScore, 4.2); // (3+4+7+2+5)/5, fail counts as 7
-  assert.equal(s.best, 2);
   assert.deepEqual(s.distribution, [0, 1, 1, 1, 1, 0]);
   assert.equal(s.longest, 2); // 1-2 and 4-5
   assert.equal(s.current, 2); // latest solve 5, back through 4
@@ -47,7 +46,7 @@ test('every unfinished guess count scores FAIL_SCORE for the average', () => {
 
 // An unfinished game stores its partial guess count (1-5) but solved=false. That
 // count must never reach a metric: it scores FAIL_SCORE like any loss, stays out
-// of the distribution and best, and breaks the streak exactly like a 6/6 failure.
+// of the distribution, and breaks the streak exactly like a 6/6 failure.
 test('an unfinished game scores as a loss regardless of its partial guess count', () => {
   const unfinished = summarize([
     userRow(1, 4, true),
@@ -64,7 +63,6 @@ test('an unfinished game scores as a loss regardless of its partial guess count'
   assert.equal(unfinished.avgScore, (4 + 7 + 5) / 3); // the loss counts as FAIL_SCORE, not 2
   assert.deepEqual(unfinished.distribution, failed.distribution);
   assert.deepEqual(unfinished.distribution, [0, 0, 0, 1, 1, 0]); // the 2/false loss is absent
-  assert.equal(unfinished.best, 4); // best comes from wins only, never the partial count
   assert.equal(unfinished.fails, 1);
   assert.equal(unfinished.longest, 1); // the loss at puzzle 2 breaks the run
   assert.equal(unfinished.current, 1); // latest solve is puzzle 3, alone
@@ -87,7 +85,6 @@ test('summarize handles an all-empty history', () => {
   const s = summarize([]);
   assert.equal(s.games, 0);
   assert.equal(s.avgScore, null);
-  assert.equal(s.best, null);
   assert.equal(s.current, 0);
 });
 
@@ -104,7 +101,6 @@ test('aggregateLeaderboard ranks by average score then games', () => {
     ['a', 'b'],
   );
   assert.equal(board[0].avgScore, 3); // (2+4)/2
-  assert.equal(board[0].best, 2);
   assert.equal(board[1].avgScore, 5); // (3+7)/2, fail counts as 7
 });
 

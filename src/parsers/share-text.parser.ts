@@ -31,6 +31,8 @@ class ShareTextParser implements WordleParser {
         solved,
         hardMode: match[3] === '*',
         grid: parseEmojiGrid(message.content),
+        words: null,
+        answer: null,
         player: { kind: 'known', user: { id: author.id, name: author.globalName || author.username } },
       },
     ];

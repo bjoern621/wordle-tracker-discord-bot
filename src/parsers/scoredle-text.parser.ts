@@ -31,6 +31,8 @@ class ScoredleTextParser implements WordleParser {
         solved,
         hardMode: match[2] === '*',
         grid: parseEmojiGrid(message.content),
+        words: null,
+        answer: null,
         player: { kind: 'known', user: { id: author.id, name: author.globalName || author.username } },
       },
     ];

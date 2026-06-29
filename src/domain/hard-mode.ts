@@ -1,15 +1,6 @@
 // Hard mode: the reported flag where a source carries it, and a colour-only
 // inference ("probably hard mode") where it does not.
 
-import type { ResultSource } from '../types.js';
-
-// Manual-text sources carry the trailing `*` and so report hard mode exactly.
-// Image and summary sources do not, leaving the stored flag at false regardless
-// of how the game was actually played.
-export function reportsHardMode(source: ResultSource): boolean {
-  return source === 'share-text' || source === 'scoredle';
-}
-
 /** The stored grid is JSON.stringify of the per-guess B/Y/G rows. */
 export function parseStoredGrid(grid: string | null): string[] | null {
   if (!grid) return null;
@@ -55,17 +46,14 @@ export function gridIsHardModeConsistent(rows: readonly string[]): boolean {
 }
 
 /**
- * Whether a stored game counts as hard mode for aggregation. A source that
- * reports hard mode is authoritative (a missing flag means normal mode, not
- * unknown). Otherwise the grid decides: a hard-mode-consistent grid counts as
- * "probably hard mode", and is treated the same as a reported one.
+ * Whether a stored game counts as hard mode for aggregation. A recorded flag is
+ * authoritative: hardMode is non-null only when a source that reports hard mode
+ * set it. When it is null no such source was seen, so the grid decides: a
+ * hard-mode-consistent grid counts as "probably hard mode", treated the same as a
+ * reported one.
  */
-export function effectiveHardMode(row: {
-  source: ResultSource;
-  hardMode: boolean;
-  grid: string | null;
-}): boolean {
-  if (reportsHardMode(row.source)) return row.hardMode;
+export function effectiveHardMode(row: { hardMode: boolean | null; grid: string | null }): boolean {
+  if (row.hardMode !== null) return row.hardMode;
   const grid = parseStoredGrid(row.grid);
   return grid ? gridIsHardModeConsistent(grid) : false;
 }

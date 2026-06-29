@@ -2,7 +2,7 @@ import { AttachmentBuilder, SlashCommandBuilder, type ChatInputCommandInteractio
 import type { BotCommand } from './command.js';
 import { getUserResults } from '../db/results.repository.js';
 import { summarize } from '../stats/stats.js';
-import { pct, fixed, bestLabel } from '../stats/format.js';
+import { pct, fixed } from '../stats/format.js';
 import { renderStatsPng, type StatTile, type StatBar } from '../render/stats-image.js';
 import { greenFor, FAILED } from '../render/theme.js';
 import { config } from '../config/index.js';
@@ -33,7 +33,6 @@ export const statsCommand: BotCommand = {
       { label: 'Games', value: String(s.games) },
       { label: 'Win rate', value: `${pct(s.winRate)} (${s.wins})` },
       { label: 'Avg score', value: fixed(s.avgScore) },
-      { label: 'Best', value: bestLabel(s.best) },
       { label: 'Current streak', value: String(s.current) },
       { label: 'Longest streak', value: String(s.longest) },
       { label: 'Hard mode', value: `${pct(s.hardMode / s.games)} (${s.hardMode})` },

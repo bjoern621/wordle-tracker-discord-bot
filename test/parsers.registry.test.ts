@@ -25,6 +25,15 @@ test('a Wordle share routes to the share-text parser', async () => {
   assert.equal(source, 'share-text');
 });
 
+// The /status header also matches the manual-share pattern, so the registry order
+// must reach the status parser first when the letter tiles and answer are present.
+test('a pasted /status routes to the status parser, not share-text', async () => {
+  const content =
+    'Wordle 1836 1/6\n29.6.2026\n\nThe word is crane\n\n:cgreen::rgreen::agreen::ngreen::egreen:';
+  const source = await route(fakeMessage({ content }));
+  assert.equal(source, 'status');
+});
+
 test('a Scoredle paste routes to the scoredle parser', async () => {
   const source = await route(fakeMessage({ content: 'Scoredle 4/6\n\n14,855\n🟩🟩🟩🟩🟩' }));
   assert.equal(source, 'scoredle');

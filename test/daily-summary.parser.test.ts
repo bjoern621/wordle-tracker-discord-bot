@@ -36,7 +36,7 @@ test('one game per mention, attributed to yesterday\'s puzzle', async () => {
   for (const g of games!) {
     assert.equal(g.number, 1834);
     assert.equal(g.grid, null);
-    assert.equal(g.hardMode, false);
+    assert.equal(g.hardMode, null); // the summary does not report hard mode
   }
 });
 
@@ -47,7 +47,9 @@ test('scores and solved flag are read per line', async () => {
     guesses: 4,
     solved: true,
     grid: null,
-    hardMode: false,
+    words: null,
+    answer: null,
+    hardMode: null,
     player: { kind: 'participant', id: '111' },
   });
   assert.equal(byId(games, '444')?.guesses, 6);
@@ -64,7 +66,9 @@ test('plain @names become unresolved participants', async () => {
     guesses: 5,
     solved: true,
     grid: null,
-    hardMode: false,
+    words: null,
+    answer: null,
+    hardMode: null,
     player: { kind: 'participant', name: 'Tim' },
   });
 });

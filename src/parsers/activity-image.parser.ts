@@ -56,6 +56,8 @@ class ActivityImageParser implements WordleParser {
         solved: grid.solved,
         hardMode: null,
         grid: grid.patterns,
+        words: null,
+        answer: null,
         player: who,
       },
     ];

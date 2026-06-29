@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { planResultWrite } from '../src/db/results-merge.js';
 import type { ExistingRow, ResultRecord } from '../src/db/results-merge.js';
+import { effectiveHardMode } from '../src/domain/hard-mode.js';
 import type { ResultSource } from '../src/types.js';
 
 const T_DAY = new Date('2026-06-27T20:00:00Z'); // image, posted on the puzzle day
@@ -21,7 +22,9 @@ function incoming(over: Partial<ResultRecord> = {}): ResultRecord {
     guesses: 4,
     solved: true,
     grid: null,
-    hardMode: false,
+    words: null,
+    answer: null,
+    hardMode: null, // default source 'summary' does not report hard mode
     source: 'summary' as ResultSource,
     messageTs: T_NEXT,
     username: 'alice',
@@ -35,7 +38,9 @@ function existingRow(over: Partial<ExistingRow> = {}): ExistingRow {
     guesses: 4,
     solved: true,
     grid: null,
-    hard_mode: false,
+    words: null,
+    answer: null,
+    hard_mode: null, // a row first created by a non-reporting source
     message_ts: T_NEXT,
     ...over,
   };
@@ -43,19 +48,19 @@ function existingRow(over: Partial<ExistingRow> = {}): ExistingRow {
 
 test('first sighting of a puzzle is inserted', () => {
   const plan = planResultWrite(undefined, incoming({ source: 'activity', grid: 'GGGGG', messageTs: T_DAY }));
-  assert.deepEqual(plan, { kind: 'upsert', guesses: 4, grid: 'GGGGG', hardMode: false, status: 'inserted' });
+  assert.deepEqual(plan, { kind: 'upsert', guesses: 4, grid: 'GGGGG', words: null, answer: null, hardMode: null, status: 'inserted' });
 });
 
 // Only the summary is available for this player (no solo image): it is stored as
 // given. A win keeps its real score; a loss is the coarse 6/false with no grid.
 test('a summary win with no image is stored with its score and no grid', () => {
   const plan = planResultWrite(undefined, incoming({ source: 'summary', guesses: 4, solved: true, grid: null }));
-  assert.deepEqual(plan, { kind: 'upsert', guesses: 4, grid: null, hardMode: false, status: 'inserted' });
+  assert.deepEqual(plan, { kind: 'upsert', guesses: 4, grid: null, words: null, answer: null, hardMode: null, status: 'inserted' });
 });
 
 test('a summary loss with no image is stored coarsely as 6/false with no grid', () => {
   const plan = planResultWrite(undefined, incoming({ source: 'summary', guesses: 6, solved: false, grid: null }));
-  assert.deepEqual(plan, { kind: 'upsert', guesses: 6, grid: null, hardMode: false, status: 'inserted' });
+  assert.deepEqual(plan, { kind: 'upsert', guesses: 6, grid: null, words: null, answer: null, hardMode: null, status: 'inserted' });
 });
 
 // The reported bug: summary stored first (newer, no grid), image reached later
@@ -63,7 +68,7 @@ test('a summary loss with no image is stored coarsely as 6/false with no grid', 
 test('an older activity image backfills the grid onto a gridless summary row', () => {
   const existing = existingRow({ grid: null, message_ts: T_NEXT });
   const plan = planResultWrite(existing, incoming({ source: 'activity', grid: 'BYGGB', messageTs: T_DAY }));
-  assert.deepEqual(plan, { kind: 'enrich', guesses: 4, grid: 'BYGGB', status: 'updated' });
+  assert.deepEqual(plan, { kind: 'enrich', guesses: 4, grid: 'BYGGB', words: null, answer: null, hardMode: null, status: 'updated' });
 });
 
 test('an older grid does not overwrite a grid already stored', () => {
@@ -84,7 +89,7 @@ test('an older message with no grid is ignored as stale', () => {
 test('a newer gridless summary preserves the grid of an existing image row', () => {
   const existing = existingRow({ grid: 'GGGGG', message_ts: T_DAY });
   const plan = planResultWrite(existing, incoming({ source: 'summary', grid: null, messageTs: T_NEXT }));
-  assert.deepEqual(plan, { kind: 'upsert', guesses: 4, grid: 'GGGGG', hardMode: false, status: 'unchanged' });
+  assert.deepEqual(plan, { kind: 'upsert', guesses: 4, grid: 'GGGGG', words: null, answer: null, hardMode: null, status: 'unchanged' });
 });
 
 test('a newer message with its own grid overrides the stored grid', () => {
@@ -131,10 +136,21 @@ test('an equal-timestamp message overwrites rather than being treated as stale',
   assert.equal(plan.status, 'updated');
 });
 
+// A non-reporting source carries hardMode null, so a newer one never erases a
+// reported value: the stored true survives the next-day summary.
 test('hard mode is preserved when a non-reporting source updates the row', () => {
   const existing = existingRow({ hard_mode: true, message_ts: T_DAY });
-  const plan = planResultWrite(existing, incoming({ source: 'summary', hardMode: false, messageTs: T_NEXT }));
+  const plan = planResultWrite(existing, incoming({ source: 'summary', hardMode: null, messageTs: T_NEXT }));
   assert.equal(plan.kind === 'upsert' && plan.hardMode, true);
+});
+
+// Backfill order of the same pair: the gridless summary lands first (null hard
+// mode), then the older share-text supplies the reported value via enrich. The
+// stored hard mode is identical to the live order, so the two no longer diverge.
+test('an older reporting source fills hard mode onto a row that has none', () => {
+  const existing = existingRow({ hard_mode: null, message_ts: T_NEXT });
+  const plan = planResultWrite(existing, incoming({ source: 'share-text', hardMode: true, messageTs: T_DAY }));
+  assert.deepEqual(plan, { kind: 'enrich', guesses: 4, grid: null, words: null, answer: null, hardMode: true, status: 'updated' });
 });
 
 test('a share-text source sets hard mode from its own value', () => {
@@ -155,7 +171,7 @@ test('an older solo image refines a busted summary loss with the real count and 
     existing,
     incoming({ source: 'activity', guesses: 5, solved: false, grid: 'BYBBG', messageTs: T_DAY }),
   );
-  assert.deepEqual(plan, { kind: 'enrich', guesses: 5, grid: 'BYBBG', status: 'updated' });
+  assert.deepEqual(plan, { kind: 'enrich', guesses: 5, grid: 'BYBBG', words: null, answer: null, hardMode: null, status: 'updated' });
 });
 
 // Live order of the same busted game: the solo image is stored first with its real
@@ -168,7 +184,7 @@ test('a newer busted summary keeps the real count and grid from an existing imag
     existing,
     incoming({ source: 'summary', guesses: 6, solved: false, grid: null, messageTs: T_NEXT }),
   );
-  assert.deepEqual(plan, { kind: 'upsert', guesses: 5, grid: 'BYBBG', hardMode: false, status: 'unchanged' });
+  assert.deepEqual(plan, { kind: 'upsert', guesses: 5, grid: 'BYBBG', words: null, answer: null, hardMode: null, status: 'unchanged' });
 });
 
 // The correction protection still holds: a loss grid is never carried onto a row a
@@ -192,7 +208,7 @@ test('a newer gridless solve drops a stored partial loss grid', () => {
     existing,
     incoming({ source: 'summary', guesses: 5, solved: true, grid: null, messageTs: T_NEXT }),
   );
-  assert.deepEqual(plan, { kind: 'upsert', guesses: 5, grid: null, hardMode: false, status: 'updated' });
+  assert.deepEqual(plan, { kind: 'upsert', guesses: 5, grid: null, words: null, answer: null, hardMode: null, status: 'updated' });
 });
 
 // The finishing edit carries its own complete grid, which replaces the partial one.
@@ -202,5 +218,185 @@ test('a finishing edit replaces the stored partial grid with its complete grid',
     existing,
     incoming({ source: 'activity', guesses: 5, solved: true, grid: 'GGGGG', messageTs: T_NEXT }),
   );
-  assert.deepEqual(plan, { kind: 'upsert', guesses: 5, grid: 'GGGGG', hardMode: false, status: 'updated' });
+  assert.deepEqual(plan, { kind: 'upsert', guesses: 5, grid: 'GGGGG', words: null, answer: null, hardMode: null, status: 'updated' });
+});
+
+// --- Order independence -----------------------------------------------------
+// The merge promises the same stored row no matter what order a set of messages
+// for one (guild, user, puzzle) arrives in: the newest message fixes the win/loss
+// and provenance, and any message can fill a fillable field the row is missing
+// (guess count + grid, and hard mode). The harness below folds a sequence of
+// records exactly as recordResult does, then checks that different arrival orders
+// of the same set converge, raw hard_mode column included.
+
+/** The persisted row, mirroring what recordResult stores. */
+interface StoredRow {
+  guesses: number;
+  solved: boolean;
+  grid: string | null;
+  words: string | null;
+  answer: string | null;
+  hard_mode: boolean | null;
+  message_ts: Date;
+  source: ResultSource;
+}
+
+/** Folds one record into the stored row, mirroring recordResult's apply step. */
+function applyRecord(existing: StoredRow | undefined, r: ResultRecord): StoredRow {
+  const plan = planResultWrite(existing, r);
+  switch (plan.kind) {
+    case 'skip':
+      return existing as StoredRow;
+    case 'enrich':
+      return {
+        ...(existing as StoredRow),
+        guesses: plan.guesses,
+        grid: plan.grid,
+        words: plan.words,
+        answer: plan.answer,
+        hard_mode: plan.hardMode,
+      };
+    case 'upsert':
+      return {
+        guesses: plan.guesses,
+        solved: r.solved,
+        grid: plan.grid,
+        words: plan.words,
+        answer: plan.answer,
+        hard_mode: plan.hardMode,
+        message_ts: r.messageTs,
+        source: r.source,
+      };
+  }
+}
+
+function runInOrder(records: ResultRecord[]): StoredRow {
+  let row: StoredRow | undefined;
+  for (const r of records) row = applyRecord(row, r);
+  return row as StoredRow;
+}
+
+/**
+ * The state a reader actually observes, including the raw hard_mode column and
+ * its read-time value through effectiveHardMode. Both are asserted, so the merge
+ * must agree on the stored flag itself, not only on what a reader derives.
+ */
+function observable(row: StoredRow) {
+  return {
+    solved: row.solved,
+    guesses: row.guesses,
+    grid: row.grid,
+    words: row.words,
+    answer: row.answer,
+    source: row.source,
+    messageTs: row.message_ts.toISOString(),
+    hardMode: row.hard_mode,
+    effectiveHardMode: effectiveHardMode({ hardMode: row.hard_mode, grid: row.grid }),
+  };
+}
+
+function permutations<T>(xs: readonly T[]): T[][] {
+  if (xs.length <= 1) return [[...xs]];
+  return xs.flatMap((x, i) =>
+    permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map((rest) => [x, ...rest]),
+  );
+}
+
+const TS = (mins: number) => new Date(T_DAY.getTime() + mins * 60_000);
+// JSON-encoded grids, the on-disk shape effectiveHardMode reads back.
+const WIN_GRID = JSON.stringify(['BBBBB', 'BYBBG', 'GGGGG']); // 3-guess win
+const PARTIAL_LOSS_GRID = JSON.stringify(['BBBBB', 'BYBBB']); // abandoned after 2
+// The /status words that pair with WIN_GRID: three guesses ending on the answer.
+const WIN_WORDS = JSON.stringify(['slate', 'briny', 'crane']);
+const WIN_ANSWER = 'crane';
+
+// Sets with at most one grid per win/loss value. For these, every arrival order
+// converges, so all permutations must reach the same observable state.
+const convergentSets: Array<{ name: string; records: ResultRecord[] }> = [
+  {
+    name: 'win: gridless summary and grid-bearing image',
+    records: [
+      incoming({ source: 'activity', solved: true, guesses: 3, grid: WIN_GRID, messageTs: TS(0) }),
+      incoming({ source: 'summary', solved: true, guesses: 3, grid: null, messageTs: TS(720) }),
+    ],
+  },
+  {
+    name: 'busted loss: coarse summary X/6 and real abandoned image',
+    records: [
+      incoming({ source: 'activity', solved: false, guesses: 2, grid: PARTIAL_LOSS_GRID, messageTs: TS(0) }),
+      incoming({ source: 'summary', solved: false, guesses: 6, grid: null, messageTs: TS(720) }),
+    ],
+  },
+  {
+    name: 'finish overturns an unfinished loss, dropping the partial grid',
+    records: [
+      incoming({ source: 'activity', solved: false, guesses: 2, grid: PARTIAL_LOSS_GRID, messageTs: TS(0) }),
+      incoming({ source: 'summary', solved: true, guesses: 4, grid: null, messageTs: TS(720) }),
+    ],
+  },
+  {
+    name: 'three messages, single win grid plus two gridless summaries',
+    records: [
+      incoming({ source: 'summary', solved: true, guesses: 4, grid: null, messageTs: TS(0) }),
+      incoming({ source: 'activity', solved: true, guesses: 3, grid: WIN_GRID, messageTs: TS(60) }),
+      incoming({ source: 'summary', solved: true, guesses: 4, grid: null, messageTs: TS(720) }),
+    ],
+  },
+  {
+    name: 'reporting share-text win is authoritative for hard mode',
+    records: [
+      incoming({ source: 'share-text', solved: true, guesses: 3, grid: WIN_GRID, hardMode: true, messageTs: TS(60) }),
+      incoming({ source: 'summary', solved: true, guesses: 3, grid: null, messageTs: TS(720) }),
+    ],
+  },
+  {
+    // The /status carries the same grid plus the words and answer; whichever order
+    // it arrives in, the words land on the row and survive the gridless summary and
+    // the wordless activity image that share its grid.
+    name: 'status fills the words and answer onto a shared win grid',
+    records: [
+      incoming({ source: 'activity', solved: true, guesses: 3, grid: WIN_GRID, messageTs: TS(0) }),
+      incoming({
+        source: 'status',
+        solved: true,
+        guesses: 3,
+        grid: WIN_GRID,
+        words: WIN_WORDS,
+        answer: WIN_ANSWER,
+        hardMode: false,
+        messageTs: TS(60),
+      }),
+      incoming({ source: 'summary', solved: true, guesses: 3, grid: null, messageTs: TS(720) }),
+    ],
+  },
+];
+
+for (const { name, records } of convergentSets) {
+  test(`every arrival order converges: ${name}`, () => {
+    const expected = observable(runInOrder(records));
+    for (const order of permutations(records)) {
+      assert.deepEqual(observable(runInOrder(order)), expected);
+    }
+  });
+}
+
+// With two distinct grids for the same win/loss, only the real ingestion orders
+// are guaranteed to agree: live (oldest first) and backfill (newest first). Both
+// resolve to the newest grid-bearing message for the outcome.
+test('live and backfill agree when two grids exist for the same loss', () => {
+  const SHARE_LOSS_GRID = JSON.stringify(['BBBBB', 'BYBBB', 'YBBBB', 'BBBBB', 'BBBBB', 'BBYBB']);
+  const records = [
+    incoming({ source: 'activity', solved: false, guesses: 2, grid: PARTIAL_LOSS_GRID, messageTs: TS(0) }),
+    incoming({ source: 'share-text', solved: false, guesses: 6, grid: SHARE_LOSS_GRID, hardMode: true, messageTs: TS(60) }),
+    incoming({ source: 'summary', solved: false, guesses: 6, grid: null, messageTs: TS(720) }),
+  ];
+  const ascending = [...records].sort((a, b) => a.messageTs.getTime() - b.messageTs.getTime());
+  const descending = [...ascending].reverse();
+  const live = observable(runInOrder(ascending));
+  const backfill = observable(runInOrder(descending));
+  assert.deepEqual(live, backfill);
+  // The newest grid-bearing message for the loss is the share-text, so its count
+  // and grid win over the older partial image's.
+  assert.equal(live.guesses, 6);
+  assert.equal(live.grid, SHARE_LOSS_GRID);
 });

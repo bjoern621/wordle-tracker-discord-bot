@@ -27,19 +27,19 @@ test('parseStoredGrid reads the JSON array and rejects anything else', () => {
   assert.equal(parseStoredGrid(JSON.stringify({ a: 1 })), null);
 });
 
-test('reported sources are authoritative, regardless of the grid', () => {
+test('a recorded flag is authoritative, regardless of the grid', () => {
   const violating = JSON.stringify(['BGBBB', 'BBBBB', 'GGGGG']);
   const compliant = JSON.stringify(['BBBBB', 'YBBBB', 'GGGGG']);
   // A reported-on game counts even if its grid would not pass inference.
-  assert.equal(effectiveHardMode({ source: 'share-text', hardMode: true, grid: violating }), true);
+  assert.equal(effectiveHardMode({ hardMode: true, grid: violating }), true);
   // A reported-off game does not count even if its grid is consistent.
-  assert.equal(effectiveHardMode({ source: 'share-text', hardMode: false, grid: compliant }), false);
+  assert.equal(effectiveHardMode({ hardMode: false, grid: compliant }), false);
 });
 
-test('non-reporting sources fall back to grid inference', () => {
+test('an unrecorded flag (null) falls back to grid inference', () => {
   const compliant = JSON.stringify(['BBBBB', 'YBBBB', 'GGGGG']);
   const violating = JSON.stringify(['BGBBB', 'BBBBB', 'GGGGG']);
-  assert.equal(effectiveHardMode({ source: 'activity', hardMode: false, grid: compliant }), true);
-  assert.equal(effectiveHardMode({ source: 'activity', hardMode: false, grid: violating }), false);
-  assert.equal(effectiveHardMode({ source: 'activity', hardMode: false, grid: null }), false);
+  assert.equal(effectiveHardMode({ hardMode: null, grid: compliant }), true);
+  assert.equal(effectiveHardMode({ hardMode: null, grid: violating }), false);
+  assert.equal(effectiveHardMode({ hardMode: null, grid: null }), false);
 });

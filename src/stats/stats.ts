@@ -6,9 +6,9 @@ import { FAIL_SCORE } from '../constants.js';
 import { effectiveHardMode, parseStoredGrid } from '../domain/hard-mode.js';
 
 /**
- * The score/win/best figures every view derives from a bag of games. One rollup
- * shared by the per-player summary and each leaderboard entry, so a win rate,
- * average, or best is computed the same way wherever it appears.
+ * The score/win figures every view derives from a bag of games. One rollup
+ * shared by the per-player summary and each leaderboard entry, so a win rate or
+ * average is computed the same way wherever it appears.
  */
 export interface GameTotals {
   games: number;
@@ -17,8 +17,6 @@ export interface GameTotals {
   winRate: number;
   /** Mean penalty score (fails count as FAIL_SCORE); null when no games. */
   avgScore: number | null;
-  /** Fewest guesses in a win; null when no wins. */
-  best: number | null;
 }
 
 export interface PlayerSummary extends GameTotals {
@@ -51,20 +49,16 @@ export function penaltyScore(r: { solved: boolean; guesses: number }): number {
 }
 
 /**
- * Rolls a bag of games into the shared score/win/best figures. The single place
- * those derivations live, so the per-player summary and every leaderboard entry
+ * Rolls a bag of games into the shared score/win figures. The single place those
+ * derivations live, so the per-player summary and every leaderboard entry
  * average and rank games identically.
  */
 export function totals(rows: readonly { solved: boolean; guesses: number }[]): GameTotals {
   let wins = 0;
   let scoreSum = 0;
-  let best: number | null = null;
   for (const r of rows) {
     scoreSum += penaltyScore(r);
-    if (r.solved) {
-      wins += 1;
-      best = best == null ? r.guesses : Math.min(best, r.guesses);
-    }
+    if (r.solved) wins += 1;
   }
   const games = rows.length;
   return {
@@ -73,7 +67,6 @@ export function totals(rows: readonly { solved: boolean; guesses: number }[]): G
     fails: games - wins,
     winRate: games ? wins / games : 0,
     avgScore: games ? scoreSum / games : null,
-    best,
   };
 }
 
