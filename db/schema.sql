@@ -83,12 +83,12 @@ CREATE TABLE results (
         CHECK (guess_words IS NULL OR answer IS NOT NULL),
 
     -- A solved game's last guess is the answer; a lost or unfinished one never
-    -- guessed it. Each word is a quoted five-letter element, so the answer matches
-    -- exactly one element and cannot collide with a substring of another.
+    -- guessed it. Both checks read the parsed array, so the answer is matched
+    -- against whole elements and cannot collide with a substring of another.
     CONSTRAINT results_solved_last_word_is_answer
-        CHECK (guess_words IS NULL OR NOT solved OR guess_words LIKE '%"' || answer || '"]'),
+        CHECK (guess_words IS NULL OR NOT solved OR jsonb_array_element_text(guess_words::jsonb, -1) = answer),
     CONSTRAINT results_unsolved_excludes_answer
-        CHECK (guess_words IS NULL OR solved OR guess_words NOT LIKE '%"' || answer || '"%')
+        CHECK (guess_words IS NULL OR solved OR NOT (guess_words::jsonb ? answer))
 );
 
 CREATE INDEX results_guild_date_idx ON results (guild_id, puzzle_date);
