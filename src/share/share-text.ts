@@ -15,12 +15,19 @@ function emojiRow(pattern: string): string {
 export function buildShareText(view: ShareView): string {
   const header = `Wordle ${view.numberLabel} ${view.score}${view.hardMode ? '*' : ''}`;
 
+  // Pad every count to the widest one so the "left" labels line up in a column,
+  // flush left under each other. The word and count sit in an inline-code span
+  // that Discord renders monospace, which is what keeps the columns aligned; the
+  // colour squares stay outside it so they keep rendering as emoji. Every row
+  // opens with the same five squares, so each span starts at the same offset.
+  const leftWidth = Math.max(0, ...view.rows.map((r) => (r.wordsLeft != null ? String(r.wordsLeft).length : 0)));
+
   const body: string[] = [];
   for (const r of view.rows) {
     const extras: string[] = [];
     if (r.word) extras.push(r.word);
-    if (r.wordsLeft != null) extras.push(`${r.wordsLeft} left`);
-    body.push(extras.length ? `${emojiRow(r.pattern)}  ${extras.join('  ')}` : emojiRow(r.pattern));
+    if (r.wordsLeft != null) extras.push(`${String(r.wordsLeft).padEnd(leftWidth)} left`);
+    body.push(extras.length ? `${emojiRow(r.pattern)}  \`${extras.join('  ')}\`` : emojiRow(r.pattern));
   }
 
   const footer: string[] = [];

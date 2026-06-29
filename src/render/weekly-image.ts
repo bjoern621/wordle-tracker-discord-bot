@@ -8,6 +8,8 @@ import { FONT, BACKGROUND, NOT_PLAYED, FAILED, greenFor, rgb, roundRect, type RG
 export interface WeeklyImageCell {
   guesses: number;
   solved: boolean;
+  /** Marks the cell with a hard-mode asterisk when set. */
+  hardMode: boolean;
 }
 
 export interface WeeklyImageColumn {
@@ -121,6 +123,16 @@ export function renderWeeklyPng(data: WeeklyImageData): Buffer {
         ctx.font = `40px ${FONT}`;
         ctx.textAlign = 'center';
         ctx.fillText(score, x + CELL / 2, midY);
+      }
+
+      // Hard mode marker: a corner asterisk, the same `*` Wordle's share text uses.
+      if (cell?.hardMode) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `28px ${FONT}`;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText('*', x + CELL - 8, top + 4);
+        ctx.textBaseline = 'middle';
       }
     });
 

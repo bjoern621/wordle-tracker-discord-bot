@@ -137,12 +137,16 @@ test('aggregateLeaderboard ranks by average score then games', () => {
   assert.equal(board[1].avgScore, 5); // (3+7)/2, fail counts as 7
 });
 
+function dailyRow(extra: Partial<DailyResultRow> & Pick<DailyResultRow, 'userId' | 'number' | 'guesses' | 'solved'>): DailyResultRow {
+  return { username: null, hardMode: null, grid: null, ...extra };
+}
+
 test('buildWeeklyGrid gives one row per player, ranked by average score', () => {
   const rows: DailyResultRow[] = [
-    { userId: 'a', username: 'Alice', number: 10, guesses: 3, solved: true },
-    { userId: 'a', username: 'Alice', number: 12, guesses: 2, solved: true },
-    { userId: 'b', username: 'Bob', number: 10, guesses: 4, solved: true },
-    { userId: 'b', username: 'Bob', number: 11, guesses: 6, solved: false },
+    dailyRow({ userId: 'a', username: 'Alice', number: 10, guesses: 3, solved: true }),
+    dailyRow({ userId: 'a', username: 'Alice', number: 12, guesses: 2, solved: true }),
+    dailyRow({ userId: 'b', username: 'Bob', number: 10, guesses: 4, solved: true }),
+    dailyRow({ userId: 'b', username: 'Bob', number: 11, guesses: 6, solved: false }),
   ];
   const grid = buildWeeklyGrid(rows, [10, 11, 12, 13]); // columns fixed by caller, incl. unplayed day 13
   assert.deepEqual(grid.numbers, [10, 11, 12, 13]);
@@ -155,6 +159,23 @@ test('buildWeeklyGrid gives one row per player, ranked by average score', () => 
   assert.equal(grid.players[0].byNumber.get(10)?.guesses, 3);
   assert.equal(grid.players[0].byNumber.has(11), false); // Alice skipped puzzle 11
   assert.equal(grid.players[1].byNumber.get(11)?.solved, false); // Bob failed it
+});
+
+// Each cell carries the same effectiveHardMode the stats card uses: the reported
+// flag when present, else grid inference, else false.
+test('buildWeeklyGrid marks each cell with effective hard mode', () => {
+  const compliant = JSON.stringify(['BYBBB', 'GBYBB', 'GGGGG']); // grid-inferred hard mode
+  const rows: DailyResultRow[] = [
+    dailyRow({ userId: 'a', number: 10, guesses: 3, solved: true, hardMode: true }), // reported on
+    dailyRow({ userId: 'a', number: 11, guesses: 3, solved: true, hardMode: false, grid: compliant }), // reported off wins
+    dailyRow({ userId: 'a', number: 12, guesses: 3, solved: true, grid: compliant }), // inferred on
+    dailyRow({ userId: 'a', number: 13, guesses: 3, solved: true }), // no signal
+  ];
+  const cells = buildWeeklyGrid(rows, [10, 11, 12, 13]).players[0].byNumber;
+  assert.equal(cells.get(10)?.hardMode, true);
+  assert.equal(cells.get(11)?.hardMode, false);
+  assert.equal(cells.get(12)?.hardMode, true);
+  assert.equal(cells.get(13)?.hardMode, false);
 });
 
 test('headToHead compares only shared puzzles', () => {

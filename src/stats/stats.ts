@@ -170,6 +170,8 @@ export function aggregateLeaderboard(rows: LeaderboardRow[]): LeaderboardEntry[]
 export interface WeeklyCell {
   guesses: number;
   solved: boolean;
+  /** Whether the game counts as hard mode (reported, or grid-inferred). */
+  hardMode: boolean;
 }
 
 export interface WeeklyPlayerRow {
@@ -198,7 +200,7 @@ export function buildWeeklyGrid(rows: DailyResultRow[], numbers: number[]): Week
   for (const r of rows) {
     let cells = byUser.get(r.userId);
     if (!cells) byUser.set(r.userId, (cells = new Map()));
-    cells.set(r.number, { guesses: r.guesses, solved: r.solved });
+    cells.set(r.number, { guesses: r.guesses, solved: r.solved, hardMode: effectiveHardMode(r) });
   }
   const players = aggregateLeaderboard(rows).map((e) => ({
     userId: e.userId,

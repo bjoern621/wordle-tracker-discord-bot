@@ -18,6 +18,10 @@ export interface LeaderboardRow {
 /** Leaderboard row plus the puzzle it belongs to, for the day-by-day weekly view. */
 export interface DailyResultRow extends LeaderboardRow {
   number: number;
+  /** Reported hard-mode flag, or null when the source did not report it. */
+  hardMode: boolean | null;
+  /** Stored colour grid, used to infer hard mode when the flag is null. */
+  grid: string | null;
 }
 
 /** Row shape returned for a single player's history. */
@@ -126,7 +130,8 @@ export async function getResults(guildId: string, from: string, to: string): Pro
 
 export async function getResultsByDay(guildId: string, from: string, to: string): Promise<DailyResultRow[]> {
   const { rows } = await pool.query<DailyResultRow>(
-    `SELECT user_id AS "userId", username, puzzle_number AS number, guesses, solved
+    `SELECT user_id AS "userId", username, puzzle_number AS number, guesses, solved,
+            hard_mode AS "hardMode", grid
        FROM results
       WHERE guild_id = $1 AND puzzle_date BETWEEN $2 AND $3
       ORDER BY puzzle_number ASC`,

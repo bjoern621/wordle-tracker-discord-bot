@@ -80,9 +80,14 @@ export function renderSharePng(view: ShareView): Buffer {
   ctx.textAlign = 'left';
   ctx.fillText(view.playerName, PAD, PAD + TITLE_H + SUB_H / 2);
 
+  // Widest count, so the "left" labels share one column instead of drifting with
+  // each number's digit count.
+  ctx.font = `15px ${FONT}`;
+  const numW = Math.max(0, ...view.rows.map((r) => (r.wordsLeft != null ? ctx.measureText(String(r.wordsLeft)).width : 0)));
+
   let y = PAD + TITLE_H + SUB_H + (view.rows.length ? GRID_TOP_GAP : 0);
   for (const r of view.rows) {
-    drawRow(ctx, r.pattern, r.word, r.wordsLeft, y);
+    drawRow(ctx, r.pattern, r.word, r.wordsLeft, numW, y);
     y += TILE + TGAP;
   }
   if (view.rows.length) y -= TGAP;
@@ -102,7 +107,14 @@ export function renderSharePng(view: ShareView): Buffer {
   return canvas.toBuffer('image/png');
 }
 
-function drawRow(ctx: SKRSContext2D, pattern: string, word: string | null, wordsLeft: number | null, y: number): void {
+function drawRow(
+  ctx: SKRSContext2D,
+  pattern: string,
+  word: string | null,
+  wordsLeft: number | null,
+  numW: number,
+  y: number,
+): void {
   for (let i = 0; i < 5; i += 1) {
     const x = PAD + i * (TILE + TGAP);
     ctx.fillStyle = tileColor(pattern[i]);
@@ -120,7 +132,9 @@ function drawRow(ctx: SKRSContext2D, pattern: string, word: string | null, words
     ctx.font = `15px ${FONT}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`${wordsLeft} left`, PAD + GRID_W + 12, y + TILE / 2);
+    const numX = PAD + GRID_W + 12;
+    ctx.fillText(String(wordsLeft), numX, y + TILE / 2);
+    ctx.fillText('left', numX + numW + 6, y + TILE / 2);
   }
 }
 
