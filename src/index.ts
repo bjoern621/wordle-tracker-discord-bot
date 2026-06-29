@@ -8,6 +8,7 @@ import { HISTORY_MONTH_SELECT, handleHistorySelect } from './commands/history.co
 import { syncGuild } from './identity/identity.js';
 import { loadGuildChannels, trackedChannels } from './settings/guild-channels.js';
 import { scheduleWeeklyLeaderboard } from './reports/leaderboard-schedule.js';
+import { startHealthServer } from './health/health-server.js';
 import { MEMBER_SYNC_INTERVAL_MS, OFFICIAL_WORDLE_APP_ID } from './constants.js';
 
 const client = createClient();
@@ -153,5 +154,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
   }
 });
+
+// Start the health endpoint before logging in so a monitor sees 503 during
+// startup and flips to 200 once the gateway reports ready.
+startHealthServer(client, config.healthPort);
 
 client.login(config.token);

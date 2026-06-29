@@ -41,6 +41,14 @@ services:
     environment:
       DATABASE_URL: postgresql://wordle:${POSTGRES_PASSWORD:-wordle}@db:5432/wordle
     command: node dist/index.js
+    # Health endpoint for external uptime monitoring. If the reverse proxy shares
+    # a Docker network with this service it can target bot:${HEALTH_PORT:-3000}
+    # directly and no published port is needed. Uncomment to publish on the host
+    # instead (e.g. when the proxy runs outside Docker).
+    # ports:
+    #   - "${HEALTH_PORT:-3000}:${HEALTH_PORT:-3000}"
+    expose:
+      - "${HEALTH_PORT:-3000}"
     depends_on:
       db:
         condition: service_healthy

@@ -12,6 +12,8 @@ export interface Config {
     enableActivityImage: boolean;
     backfillOnStart: boolean;
     backfillLimit: number;
+    /** Port for the HTTP health endpoint polled by external uptime monitoring. */
+    healthPort: number;
 }
 
 // Every variable is required: a missing or malformed value is a configuration
@@ -89,6 +91,7 @@ function loadConfig(): Config {
         enableActivityImage: bool("ENABLE_ACTIVITY_IMAGE"),
         backfillOnStart: bool("BACKFILL_ON_START"),
         backfillLimit: positiveInt("BACKFILL_LIMIT"),
+        healthPort: positiveInt("HEALTH_PORT"),
     };
 
     if (errors.length) {
